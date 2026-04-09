@@ -75,17 +75,32 @@ function avatarColor(id: number): string {
   return AVATAR_COLORS[id % AVATAR_COLORS.length];
 }
 
+// ── Folder types ─────────────────────────────────────────────────────────────
+type FolderName = "Inbox" | "Starred" | "Sent" | "Drafts" | "Spam" | "Trash";
+
 // ── Sidebar ──────────────────────────────────────────────────────────────────
 interface SidebarProps {
   unread: number;
+  starredCount: number;
+  activeFolder: FolderName;
+  onFolderChange: (f: FolderName) => void;
+  onCompose: () => void;
   onFetchNow: () => void;
   fetching: boolean;
 }
 
-function Sidebar({ unread, onFetchNow, fetching }: SidebarProps) {
-  const folders = [
-    { icon: Inbox, label: "Inbox", badge: unread, active: true },
-    { icon: Star, label: "Starred", badge: 0 },
+function Sidebar({
+  unread,
+  starredCount,
+  activeFolder,
+  onFolderChange,
+  onCompose,
+  onFetchNow,
+  fetching,
+}: SidebarProps) {
+  const folders: { icon: React.ComponentType<{ className?: string }>; label: FolderName; badge: number }[] = [
+    { icon: Inbox, label: "Inbox", badge: unread },
+    { icon: Star, label: "Starred", badge: starredCount },
     { icon: Send, label: "Sent", badge: 0 },
     { icon: FileEdit, label: "Drafts", badge: 0 },
     { icon: AlertOctagon, label: "Spam", badge: 0 },
@@ -106,6 +121,7 @@ function Sidebar({ unread, onFetchNow, fetching }: SidebarProps) {
       <div className="px-3 pt-4 pb-2 shrink-0">
         <button
           type="button"
+          onClick={onCompose}
           className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
         >
           <span className="text-lg leading-none">+</span>
@@ -115,15 +131,16 @@ function Sidebar({ unread, onFetchNow, fetching }: SidebarProps) {
 
       {/* Folders */}
       <nav className="flex-1 px-2 py-1 space-y-0.5 overflow-y-auto">
-        {folders.map(({ icon: Icon, label, badge, active }) => (
+        {folders.map(({ icon: Icon, label, badge }) => (
           <button
             key={label}
             type="button"
+            onClick={() => onFolderChange(label)}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors",
-              active
+              "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer",
+              activeFolder === label
                 ? "bg-white/15 text-white font-medium"
-                : "text-white/60 hover:bg-white/8 hover:text-white",
+                : "text-white/60 hover:bg-white/10 hover:text-white",
             )}
           >
             <Icon className="w-4 h-4 shrink-0" />
@@ -138,7 +155,7 @@ function Sidebar({ unread, onFetchNow, fetching }: SidebarProps) {
       </nav>
 
       {/* Fetch now */}
-      <div className="px-3 py-3 border-t border-white/10 shrink-0 space-y-1">
+      <div className="px-3 py-3 border-t border-white/10 shrink-0">
         <button
           type="button"
           onClick={onFetchNow}
@@ -157,11 +174,12 @@ function Sidebar({ unread, onFetchNow, fetching }: SidebarProps) {
 interface EmailRowProps {
   mail: MailItem;
   selected: boolean;
+  starred: boolean;
   onClick: () => void;
+  onStar: (id: number) => void;
 }
 
-function EmailRow({ mail, selected, onClick }: EmailRowProps) {
-  const [starred, setStarred] = useState(false);
+function EmailRow({ mail, selected, starred, onClick, onStar }: EmailRowProps) {
   const isUnread = !mail.isRead;
 
   return (
@@ -241,8 +259,8 @@ function EmailRow({ mail, selected, onClick }: EmailRowProps) {
       {/* Star */}
       <button
         type="button"
-        className="shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity"
-        onClick={(e) => { e.stopPropagation(); setStarred((v) => !v); }}
+        className="shrink-0 mt-1 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+        onClick={(e) => { e.stopPropagation(); onStar(mail.id); }}
       >
         <Star
           className={cn(
@@ -473,6 +491,16 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
   );
 }
 
+// ── Folder empty states ───────────────────────────────────────────────────────
+const FOLDER_EMPTY: Record<FolderName, { icon: React.ComponentType<{ className?: string }>; title: string; desc: string }> = {
+  Inbox: { icon: Inbox, title: "Inbox is empty", desc: "New emails will appear here automatically." },
+  Starred: { icon: Star, title: "No starred emails", desc: "Star emails you want to find easily later." },
+  Sent: { icon: Send, title: "No sent emails", desc: "Sent emails from Hostinger will appear here." },
+  Drafts: { icon: FileEdit, title: "No drafts", desc: "Drafts will appear here once created." },
+  Spam: { icon: AlertOctagon, title: "No spam", desc: "Spam emails from Hostinger will appear here." },
+  Trash: { icon: Trash2, title: "Trash is empty", desc: "Deleted emails will appear here." },
+};
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function MailPage() {
   const [, setLocation] = useLocation();
@@ -480,8 +508,11 @@ export default function MailPage() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [activeFolder, setActiveFolder] = useState<FolderName>("Inbox");
+  const [starredIds, setStarredIds] = useState<Set<number>>(new Set());
+  const [composeOpen, setComposeOpen] = useState(false);
 
-  const { data: mails, isLoading, refetch, isFetching } = useListMail({
+  const { data: mails, isLoading, refetch } = useListMail({
     query: { refetchInterval: 30_000 },
   });
 
@@ -492,7 +523,6 @@ export default function MailPage() {
       return res.json();
     },
     onSuccess: () => {
-      // Wait 3 seconds for IMAP to complete then refresh the list
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: getListMailQueryKey() });
         refetch();
@@ -527,9 +557,39 @@ export default function MailPage() {
     queryClient.invalidateQueries({ queryKey: getListMailQueryKey() });
   };
 
-  const unread = (mails || []).filter((m) => !m.isRead).length;
+  const handleStar = (id: number) => {
+    setStarredIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
-  const filtered = (mails || []).filter((m) => {
+  const handleFolderChange = (folder: FolderName) => {
+    setActiveFolder(folder);
+    setSelectedId(null);
+    setSearch("");
+  };
+
+  const allMails = mails || [];
+  const unread = allMails.filter((m) => !m.isRead).length;
+  const starredCount = starredIds.size;
+
+  // Filter by folder first, then search
+  const folderMails = (() => {
+    switch (activeFolder) {
+      case "Inbox": return allMails;
+      case "Starred": return allMails.filter((m) => starredIds.has(m.id));
+      case "Sent":
+      case "Drafts":
+      case "Spam":
+      case "Trash":
+        return []; // Only INBOX is synced via IMAP
+    }
+  })();
+
+  const filtered = folderMails.filter((m) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -540,14 +600,20 @@ export default function MailPage() {
     );
   });
 
+  const emptyState = FOLDER_EMPTY[activeFolder];
+  const EmptyIcon = emptyState.icon;
+
   return (
-    // Full-bleed: remove parent padding
     <div className="flex h-full -m-4 md:-m-8 overflow-hidden rounded-none bg-background border border-border">
 
       {/* ── Sidebar ─────────────────────────── */}
       <div className="w-52 shrink-0">
         <Sidebar
           unread={unread}
+          starredCount={starredCount}
+          activeFolder={activeFolder}
+          onFolderChange={handleFolderChange}
+          onCompose={() => setComposeOpen(true)}
           onFetchNow={() => fetchNowMut.mutate()}
           fetching={fetchNowMut.isPending}
         />
@@ -558,7 +624,7 @@ export default function MailPage() {
         {/* List header */}
         <div className="px-4 py-3 border-b border-border shrink-0 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-foreground">Inbox</span>
+            <span className="text-sm font-bold text-foreground">{activeFolder}</span>
             <span className="text-xs text-muted-foreground">
               {filtered.length} {filtered.length === 1 ? "message" : "messages"}
             </span>
@@ -566,7 +632,7 @@ export default function MailPage() {
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search mail…"
+              placeholder={`Search ${activeFolder.toLowerCase()}…`}
               className="pl-8 h-8 text-xs bg-muted/50 border-0 focus-visible:ring-1"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -581,14 +647,16 @@ export default function MailPage() {
               </button>
             )}
           </div>
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <button type="button" className="flex items-center gap-1 hover:text-foreground transition-colors">
-              Sort: Newest <ChevronDown className="w-3 h-3" />
-            </button>
-            {unread > 0 && (
-              <span className="text-violet-600 font-medium">{unread} unread</span>
-            )}
-          </div>
+          {activeFolder === "Inbox" && (
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+              <button type="button" className="flex items-center gap-1 hover:text-foreground transition-colors">
+                Sort: Newest <ChevronDown className="w-3 h-3" />
+              </button>
+              {unread > 0 && (
+                <span className="text-violet-600 font-medium">{unread} unread</span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Email rows */}
@@ -600,15 +668,13 @@ export default function MailPage() {
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 px-6 text-center gap-3">
               <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                <Inbox className="w-6 h-6 text-muted-foreground/50" />
+                <EmptyIcon className="w-6 h-6 text-muted-foreground/50" />
               </div>
               <p className="text-sm font-medium text-muted-foreground">
-                {search ? "No matching emails" : "No emails yet"}
+                {search ? `No results in ${activeFolder}` : emptyState.title}
               </p>
               {!search && (
-                <p className="text-xs text-muted-foreground/70">
-                  Configure IMAP in the Upload tab to start receiving emails automatically.
-                </p>
+                <p className="text-xs text-muted-foreground/70">{emptyState.desc}</p>
               )}
             </div>
           ) : (
@@ -617,7 +683,9 @@ export default function MailPage() {
                 key={mail.id}
                 mail={mail}
                 selected={selectedId === mail.id}
+                starred={starredIds.has(mail.id)}
                 onClick={() => handleSelectMail(mail.id)}
+                onStar={handleStar}
               />
             ))
           )}
@@ -635,21 +703,82 @@ export default function MailPage() {
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-8">
             <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center">
-              <Inbox className="w-9 h-9 text-muted-foreground/30" />
+              <EmptyIcon className="w-9 h-9 text-muted-foreground/30" />
             </div>
             <div>
               <p className="text-base font-semibold text-foreground mb-1">
-                {mails && mails.length > 0 ? "Select a message to read" : "Your inbox is empty"}
+                {filtered.length > 0 ? "Select a message to read" : emptyState.title}
               </p>
               <p className="text-sm text-muted-foreground">
-                {mails && mails.length > 0
+                {filtered.length > 0
                   ? "Choose an email from the list on the left."
-                  : "New emails with PDF attachments will appear here automatically."}
+                  : emptyState.desc}
               </p>
             </div>
           </div>
         )}
       </div>
+
+      {/* ── Compose dialog ──────────────────── */}
+      {composeOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-end p-6 pointer-events-none"
+        >
+          <div className="w-[480px] bg-card border border-border rounded-xl shadow-2xl flex flex-col pointer-events-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 bg-[#1B1F3B] rounded-t-xl">
+              <span className="text-sm font-semibold text-white">New Message</span>
+              <button
+                type="button"
+                onClick={() => setComposeOpen(false)}
+                className="text-white/60 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Fields */}
+            <div className="divide-y divide-border">
+              <div className="flex items-center gap-2 px-4 py-2.5">
+                <span className="text-xs text-muted-foreground w-8 shrink-0">To</span>
+                <Input className="border-0 h-7 text-sm focus-visible:ring-0 px-0" placeholder="Recipients" />
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2.5">
+                <span className="text-xs text-muted-foreground w-8 shrink-0">Cc</span>
+                <Input className="border-0 h-7 text-sm focus-visible:ring-0 px-0" placeholder="" />
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2.5">
+                <span className="text-xs text-muted-foreground w-8 shrink-0">Subject</span>
+                <Input className="border-0 h-7 text-sm focus-visible:ring-0 px-0" placeholder="" />
+              </div>
+            </div>
+            {/* Body */}
+            <textarea
+              className="flex-1 resize-none px-4 py-3 text-sm bg-transparent outline-none min-h-[200px] text-foreground placeholder:text-muted-foreground"
+              placeholder="Write your message…"
+            />
+            {/* Footer */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+              <Button
+                size="sm"
+                className="bg-violet-600 hover:bg-violet-700 text-white gap-2"
+                onClick={() => {
+                  toast({ title: "Send not available", description: "Outgoing mail (SMTP) is not configured yet." });
+                  setComposeOpen(false);
+                }}
+              >
+                <Send className="w-3.5 h-3.5" /> Send
+              </Button>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-destructive transition-colors"
+                onClick={() => setComposeOpen(false)}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
