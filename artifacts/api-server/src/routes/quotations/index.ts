@@ -17,6 +17,42 @@ import {
 
 const router: IRouter = Router();
 
+// Create quotation manually
+router.post("/quotations", async (req, res): Promise<void> => {
+  const {
+    supplierName = null,
+    supplierEmail = null,
+    quotationNumber = null,
+    quotationDate = null,
+    currency = null,
+    paymentTerms = null,
+    deliveryTerms = null,
+    totalAmount = null,
+    notes = null,
+  } = req.body || {};
+
+  const [quotation] = await db
+    .insert(quotationsTable)
+    .values({
+      supplierName,
+      supplierEmail,
+      quotationNumber,
+      quotationDate,
+      currency,
+      paymentTerms,
+      deliveryTerms,
+      totalAmount,
+      notes,
+      status: "draft",
+      pdfStorageKey: null,
+      emailId: null,
+      extractionScore: null,
+    })
+    .returning();
+
+  res.status(201).json(quotation);
+});
+
 // List quotations with optional filters
 router.get("/quotations", async (req, res): Promise<void> => {
   const parsed = ListQuotationsQueryParams.safeParse(req.query);

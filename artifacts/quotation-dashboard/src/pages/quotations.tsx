@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
   Search, Filter, FileText, CheckCircle, Clock, XCircle,
-  MoreHorizontal, Trash2, ArrowRight, Loader2,
+  MoreHorizontal, Trash2, ArrowRight, Loader2, Plus,
 } from "lucide-react";
 import { useListQuotations, getListQuotationsQueryKey } from "@workspace/api-client-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +44,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useDebounce } from "@/hooks/use-debounce";
 
+const EMPTY_QUOTATION = {
+  supplierName: "",
+  supplierEmail: "",
+  quotationNumber: "",
+  quotationDate: "",
+  currency: "",
+  paymentTerms: "",
+  deliveryTerms: "",
+  totalAmount: "",
+  notes: "",
+};
+
 export default function QuotationsList() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -42,6 +64,31 @@ export default function QuotationsList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+
+  const [showNewDialog, setShowNewDialog] = useState(false);
+  const [newForm, setNewForm] = useState({ ...EMPTY_QUOTATION });
+
+  const createMut = useMutation({
+    mutationFn: async (data: typeof EMPTY_QUOTATION) => {
+      const res = await fetch("/api/quotations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Create failed");
+      return res.json() as Promise<{ id: number }>;
+    },
+    onSuccess: (quotation) => {
+      queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
+      setShowNewDialog(false);
+      setNewForm({ ...EMPTY_QUOTATION });
+      toast({ title: "Quotation created" });
+      setLocation(`/quotations/${quotation.id}`);
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Failed to create quotation" });
+    },
+  });
 
   const debouncedSearch = useDebounce(searchTerm, 300);
 
@@ -111,6 +158,10 @@ export default function QuotationsList() {
               <SelectItem value="rejected">Rejected</SelectItem>
             </SelectContent>
           </Select>
+
+          <Button onClick={() => { setNewForm({ ...EMPTY_QUOTATION }); setShowNewDialog(true); }}>
+            <Plus className="w-4 h-4 mr-2" /> New Quotation
+          </Button>
         </div>
       </div>
 
@@ -230,6 +281,114 @@ export default function QuotationsList() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* New Quotation dialog */}
+      <Dialog open={showNewDialog} onOpenChange={(v) => !v && setShowNewDialog(false)}>
+        <DialogContent className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>New Quotation</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Customer Name</Label>
+                <Input
+                  placeholder="e.g. Acme Corporation"
+                  value={newForm.supplierName}
+                  onChange={(e) => setNewForm({ ...newForm, supplierName: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Customer Email</Label>
+                <Input
+                  type="email"
+                  placeholder="e.g. buyer@acme.com"
+                  value={newForm.supplierEmail}
+                  onChange={(e) => setNewForm({ ...newForm, supplierEmail: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Quote Reference #</Label>
+                <Input
+                  placeholder="e.g. QT-2024-001"
+                  value={newForm.quotationNumber}
+                  onChange={(e) => setNewForm({ ...newForm, quotationNumber: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={newForm.quotationDate}
+                  onChange={(e) => setNewForm({ ...newForm, quotationDate: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Currency</Label>
+                <Input
+                  placeholder="e.g. USD"
+                  value={newForm.currency}
+                  onChange={(e) => setNewForm({ ...newForm, currency: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Total Amount</Label>
+                <Input
+                  placeholder="e.g. 12500.00"
+                  value={newForm.totalAmount}
+                  onChange={(e) => setNewForm({ ...newForm, totalAmount: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Payment Terms</Label>
+                <Input
+                  placeholder="e.g. Net 30, T/T in advance"
+                  value={newForm.paymentTerms}
+                  onChange={(e) => setNewForm({ ...newForm, paymentTerms: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Delivery Terms</Label>
+                <Input
+                  placeholder="e.g. FOB, CIF, DDP"
+                  value={newForm.deliveryTerms}
+                  onChange={(e) => setNewForm({ ...newForm, deliveryTerms: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Notes</Label>
+              <Textarea
+                placeholder="Any additional remarks or terms…"
+                rows={3}
+                value={newForm.notes}
+                onChange={(e) => setNewForm({ ...newForm, notes: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewDialog(false)}>Cancel</Button>
+            <Button
+              onClick={() => createMut.mutate(newForm)}
+              disabled={createMut.isPending || !newForm.supplierName.trim()}
+            >
+              {createMut.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating…</>
+              ) : (
+                <><Plus className="w-4 h-4 mr-2" /> Create Quotation</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation dialog */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
