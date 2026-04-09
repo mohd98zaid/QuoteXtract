@@ -47,7 +47,7 @@ router.get("/analytics/summary", async (req, res): Promise<void> => {
     pendingExtraction: Number(pendingRow[0]?.cnt ?? 0),
     reviewedQuotations: Number(reviewedRow?.cnt ?? 0),
     approvedQuotations: Number(approvedRow?.cnt ?? 0),
-    avgExtractionScore: scoreRow[0]?.avg ? Number(scoreRow[0].avg.toFixed(1)) : null,
+    avgExtractionScore: scoreRow[0]?.avg != null ? Math.round(Number(scoreRow[0].avg) * 10) / 10 : null,
     statusBreakdown,
   });
 });
@@ -91,7 +91,7 @@ router.get("/analytics/recent-activity", async (req, res): Promise<void> => {
     description: q.supplierName
       ? `Quotation from ${q.supplierName}${q.quotationNumber ? ` #${q.quotationNumber}` : ""} ${q.status}`
       : `Quotation #${q.id} ${q.status}`,
-    timestamp: q.createdAt.toISOString(),
+    timestamp: q.createdAt instanceof Date ? q.createdAt.toISOString() : String(q.createdAt),
     quotationId: q.id,
     emailId: q.emailId,
   }));
