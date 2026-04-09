@@ -394,6 +394,20 @@ export const GetQuotationsBySupplierResponse = zod.array(
 );
 
 /**
+ * @summary Get IMAP poller status
+ */
+export const GetImapStatusResponse = zod.object({
+  enabled: zod.boolean(),
+  connected: zod.boolean(),
+  lastCheck: zod.string().nullable(),
+  lastError: zod.string().nullable(),
+  host: zod.string(),
+  port: zod.number(),
+  email: zod.string().nullable(),
+  pollIntervalSeconds: zod.number(),
+});
+
+/**
  * @summary Get webhook endpoint URLs and setup instructions
  */
 export const GetWebhookConfigResponse = zod.object({

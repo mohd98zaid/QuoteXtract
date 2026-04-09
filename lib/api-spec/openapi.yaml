@@ -418,6 +418,20 @@ paths:
                 items:
                   $ref: "#/components/schemas/SupplierStats"
 
+  # ── IMAP ──────────────────────────────────────────────────────────────────────
+  /imap/status:
+    get:
+      operationId: getImapStatus
+      tags: [emails]
+      summary: Get IMAP poller status
+      responses:
+        "200":
+          description: IMAP poller status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImapStatus"
+
   # ── Webhooks ──────────────────────────────────────────────────────────────────
   /webhooks/config:
     get:
@@ -790,6 +804,35 @@ components:
         - type
         - description
         - timestamp
+
+    ImapStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        connected:
+          type: boolean
+        lastCheck:
+          type: ["string", "null"]
+        lastError:
+          type: ["string", "null"]
+        host:
+          type: string
+        port:
+          type: integer
+        email:
+          type: ["string", "null"]
+        pollIntervalSeconds:
+          type: integer
+      required:
+        - enabled
+        - connected
+        - lastCheck
+        - lastError
+        - host
+        - port
+        - email
+        - pollIntervalSeconds
 
     WebhookConfig:
       type: object

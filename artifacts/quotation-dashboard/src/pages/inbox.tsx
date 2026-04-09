@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import {
   UploadCloud,
   File,
@@ -16,6 +16,10 @@ import {
   Check,
   Zap,
   Mail,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  Settings2,
 } from "lucide-react";
 import {
   useListEmails,
@@ -23,6 +27,7 @@ import {
   useCreateEmail,
   useExtractQuotation,
   useListQuotations,
+  useGetImapStatus,
   useGetWebhookConfig,
   getListEmailsQueryKey,
 } from "@workspace/api-client-react";
@@ -42,44 +47,75 @@ import {
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
   return (
-    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={handleCopy}>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-7 w-7 shrink-0"
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+    >
       {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
     </Button>
   );
 }
 
-function WebhookSetupPanel() {
-  const [open, setOpen] = useState(false);
-  const { data: config, isLoading } = useGetWebhookConfig({ query: { enabled: open } });
+function ImapStatusPanel() {
+  const [open, setOpen] = useState(true);
+  const [webhookOpen, setWebhookOpen] = useState(false);
+
+  const {
+    data: imap,
+    isLoading: imapLoading,
+    refetch,
+    isFetching,
+  } = useGetImapStatus({ query: { refetchInterval: 30_000 } });
+
+  const { data: webhookConfig, isLoading: webhookLoading } = useGetWebhookConfig({
+    query: { enabled: webhookOpen },
+  });
+
+  const isConfigured = imap?.enabled;
+  const isConnected = imap?.connected;
 
   return (
     <Card className="border border-dashed border-primary/40 bg-primary/5">
+      {/* Header — always visible */}
       <button
         type="button"
-        className="w-full flex items-center justify-between p-4 text-left"
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
         onClick={() => setOpen((v) => !v)}
       >
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center text-primary">
-            <Webhook className="w-5 h-5" />
+            <Mail className="w-5 h-5" />
           </div>
           <div>
             <p className="font-semibold text-sm text-foreground">Hostinger Email Integration</p>
             <p className="text-xs text-muted-foreground">
-              Auto-receive quotations via email — no manual upload needed
+              Auto-receive &amp; extract quotation PDFs from your inbox
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-xs border-primary/30 text-primary">
-            <Zap className="w-3 h-3 mr-1" /> Phase 2
-          </Badge>
+          {imapLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          ) : isConfigured && isConnected ? (
+            <Badge className="bg-green-500 hover:bg-green-600 text-white text-xs gap-1">
+              <Wifi className="w-3 h-3" /> Connected
+            </Badge>
+          ) : isConfigured && !isConnected ? (
+            <Badge variant="destructive" className="text-xs gap-1">
+              <WifiOff className="w-3 h-3" /> Error
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-xs border-amber-300 text-amber-600 gap-1">
+              <Settings2 className="w-3 h-3" /> Setup needed
+            </Badge>
+          )}
           {open ? (
             <ChevronUp className="w-4 h-4 text-muted-foreground" />
           ) : (
@@ -89,85 +125,227 @@ function WebhookSetupPanel() {
       </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-4 border-t border-primary/20 pt-4">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-6">
+        <div className="border-t border-primary/20 px-4 pb-4 pt-4 space-y-4">
+          {/* ── IMAP Status ─────────────────────────────────────────── */}
+          {imapLoading ? (
+            <div className="flex items-center justify-center py-4">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
-          ) : config ? (
-            <>
+          ) : !isConfigured ? (
+            /* Not yet configured */
+            <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Configure Hostinger to forward supplier emails with PDF attachments to this URL.
-                Quotations are automatically extracted by AI and appear in your inbox.
+                Add your Hostinger email credentials as environment secrets to enable automatic polling.
+                The server will check for new emails with PDF attachments every minute.
               </p>
-
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
-                    Hostinger Pipe URL (Raw Email)
-                  </p>
-                  <div className="flex items-center gap-1.5 rounded-md bg-background border px-3 py-2">
-                    <code className="text-xs text-foreground flex-1 truncate font-mono">
-                      {config.rawEmailUrl}
-                    </code>
-                    <CopyButton text={config.rawEmailUrl} />
-                  </div>
+              <div className="rounded-lg border bg-background p-3 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Required secrets (Settings → Secrets)
+                </p>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {[
+                    { key: "IMAP_EMAIL", desc: "Your Hostinger email address" },
+                    { key: "IMAP_PASSWORD", desc: "Your Hostinger email password" },
+                  ].map(({ key, desc }) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono text-foreground w-36 shrink-0">
+                        {key}
+                      </code>
+                      <span className="text-xs text-muted-foreground">{desc}</span>
+                    </div>
+                  ))}
                 </div>
-
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
-                    Mailgun / SendGrid URL (Multipart Form)
+                <div className="pt-1 grid grid-cols-1 gap-1.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-1">
+                    Optional (defaults shown)
                   </p>
-                  <div className="flex items-center gap-1.5 rounded-md bg-background border px-3 py-2">
-                    <code className="text-xs text-foreground flex-1 truncate font-mono">
-                      {config.multipartUrl}
-                    </code>
-                    <CopyButton text={config.multipartUrl} />
-                  </div>
-                </div>
-
-                {config.secretRequired && (
-                  <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
-                    <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span>
-                      Webhook secret is enabled. Append <code className="font-mono">?secret=YOUR_WEBHOOK_SECRET</code> to the URL.
-                    </span>
-                  </div>
-                )}
-
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    Hostinger Setup Steps
-                  </p>
-                  <ol className="space-y-1.5">
-                    {config.hostingerSetup.map((step, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                        <span className="w-4 h-4 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                          {i + 1}
-                        </span>
-                        <span>{step.replace(/^\d+\.\s*/, "")}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-
-                <div className="flex items-start gap-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2 text-xs text-blue-800 dark:text-blue-200">
-                  <Mail className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>
-                    Supported formats: raw RFC 822 (Hostinger cPanel pipe) and multipart form
-                    (Mailgun / SendGrid Inbound Parse). Both trigger automatic AI extraction.
-                  </span>
+                  {[
+                    { key: "IMAP_HOST", desc: "imap.hostinger.com" },
+                    { key: "IMAP_PORT", desc: "993" },
+                    { key: "IMAP_POLL_INTERVAL", desc: "60 (seconds)" },
+                  ].map(({ key, desc }) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono text-foreground w-36 shrink-0">
+                        {key}
+                      </code>
+                      <span className="text-xs text-muted-foreground">{desc}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-            </>
+              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2 text-xs text-blue-800 dark:text-blue-200 flex items-start gap-2">
+                <Mail className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  Uses IMAP SSL on port 993 — exactly the settings Hostinger provides. No email
+                  piping or forwarding configuration needed.
+                </span>
+              </div>
+            </div>
           ) : (
-            <p className="text-sm text-muted-foreground py-2">
-              Failed to load webhook configuration. Make sure the API server is running.
-            </p>
+            /* Configured — show live status */
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <StatusTile
+                  label="Status"
+                  value={isConnected ? "Connected" : "Error"}
+                  icon={
+                    isConnected ? (
+                      <Wifi className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <WifiOff className="w-4 h-4 text-red-500" />
+                    )
+                  }
+                  valueClass={isConnected ? "text-green-600" : "text-red-600"}
+                />
+                <StatusTile
+                  label="Account"
+                  value={imap.email || "—"}
+                  icon={<Mail className="w-4 h-4 text-muted-foreground" />}
+                  mono
+                  truncate
+                />
+                <StatusTile
+                  label="Server"
+                  value={`${imap.host}:${imap.port}`}
+                  icon={<Settings2 className="w-4 h-4 text-muted-foreground" />}
+                  mono
+                />
+                <StatusTile
+                  label="Poll interval"
+                  value={`${imap.pollIntervalSeconds}s`}
+                  icon={<RefreshCw className="w-4 h-4 text-muted-foreground" />}
+                />
+              </div>
+
+              {imap.lastCheck && (
+                <p className="text-xs text-muted-foreground">
+                  Last checked:{" "}
+                  <span className="font-medium text-foreground">
+                    {formatDistanceToNow(new Date(imap.lastCheck), { addSuffix: true })}
+                  </span>{" "}
+                  &nbsp;·&nbsp; {format(new Date(imap.lastCheck), "HH:mm:ss")}
+                </p>
+              )}
+
+              {imap.lastError && (
+                <div className="flex items-start gap-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2 text-xs text-red-800 dark:text-red-200">
+                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>{imap.lastError}</span>
+                </div>
+              )}
+
+              {isConnected && (
+                <div className="flex items-start gap-2 rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-3 py-2 text-xs text-green-800 dark:text-green-200">
+                  <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>
+                    Polling active — any new email with a PDF attachment will be automatically
+                    extracted and appear in your inbox below.
+                  </span>
+                </div>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={() => refetch()}
+                disabled={isFetching}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+                Refresh status
+              </Button>
+            </div>
           )}
+
+          {/* ── Webhook alternative (collapsible) ─────────────────── */}
+          <div className="border-t border-primary/15 pt-3">
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setWebhookOpen((v) => !v)}
+            >
+              <Webhook className="w-3.5 h-3.5" />
+              Alternative: use a webhook endpoint instead
+              {webhookOpen ? (
+                <ChevronUp className="w-3 h-3 ml-1" />
+              ) : (
+                <ChevronDown className="w-3 h-3 ml-1" />
+              )}
+              <Badge variant="outline" className="text-[10px] px-1 py-0 border-primary/30 text-primary ml-1">
+                <Zap className="w-2.5 h-2.5 mr-0.5" /> Phase 2
+              </Badge>
+            </button>
+
+            {webhookOpen && (
+              <div className="mt-3 space-y-3">
+                {webhookLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                ) : webhookConfig ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      If you prefer push-based delivery, configure Hostinger to pipe raw emails to
+                      this URL instead of using IMAP polling.
+                    </p>
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                        Hostinger Pipe URL
+                      </p>
+                      <div className="flex items-center gap-1.5 rounded-md bg-background border px-3 py-2">
+                        <code className="text-xs text-foreground flex-1 truncate font-mono">
+                          {webhookConfig.rawEmailUrl}
+                        </code>
+                        <CopyButton text={webhookConfig.rawEmailUrl} />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                        Mailgun / SendGrid URL
+                      </p>
+                      <div className="flex items-center gap-1.5 rounded-md bg-background border px-3 py-2">
+                        <code className="text-xs text-foreground flex-1 truncate font-mono">
+                          {webhookConfig.multipartUrl}
+                        </code>
+                        <CopyButton text={webhookConfig.multipartUrl} />
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </Card>
+  );
+}
+
+function StatusTile({
+  label,
+  value,
+  icon,
+  valueClass = "",
+  mono = false,
+  truncate = false,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  valueClass?: string;
+  mono?: boolean;
+  truncate?: boolean;
+}) {
+  return (
+    <div className="rounded-lg bg-background border px-3 py-2 flex flex-col gap-1">
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        {icon}
+        <span className="text-[10px] uppercase tracking-wide font-semibold">{label}</span>
+      </div>
+      <span
+        className={`text-xs font-medium ${valueClass} ${mono ? "font-mono" : ""} ${truncate ? "truncate" : ""}`}
+      >
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -208,22 +386,14 @@ export default function Inbox() {
 
   const processFile = async (file: File) => {
     if (file.type !== "application/pdf") {
-      toast({
-        variant: "destructive",
-        title: "Invalid file type",
-        description: "Please upload a PDF file.",
-      });
+      toast({ variant: "destructive", title: "Invalid file type", description: "Please upload a PDF file." });
       return;
     }
-
     try {
       setIsUploading(true);
       setUploadProgress("Uploading PDF...");
-
       const uploadRes = await uploadPdfMut.mutateAsync({ data: { file } });
-
-      setUploadProgress("Creating email record...");
-
+      setUploadProgress("Creating record...");
       const emailRes = await createEmailMut.mutateAsync({
         data: {
           subject: `Uploaded: ${file.name}`,
@@ -232,31 +402,15 @@ export default function Inbox() {
           receivedAt: new Date().toISOString(),
         },
       });
-
       queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
-
       setUploadProgress("Extracting data via AI...");
-
       const quotationRes = await extractMut.mutateAsync({
-        data: {
-          emailId: emailRes.id,
-          pdfStorageKey: uploadRes.storageKey,
-        },
+        data: { emailId: emailRes.id, pdfStorageKey: uploadRes.storageKey },
       });
-
-      toast({
-        title: "Extraction complete",
-        description: "Successfully processed the quotation.",
-      });
-
+      toast({ title: "Extraction complete", description: "Successfully processed the quotation." });
       setLocation(`/quotations/${quotationRes.id}`);
-    } catch (error) {
-      console.error("Upload process failed:", error);
-      toast({
-        variant: "destructive",
-        title: "Processing failed",
-        description: "An error occurred while processing the PDF.",
-      });
+    } catch {
+      toast({ variant: "destructive", title: "Processing failed", description: "An error occurred while processing the PDF." });
     } finally {
       setIsUploading(false);
       setUploadProgress("");
@@ -266,22 +420,18 @@ export default function Inbox() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFile(e.dataTransfer.files[0]);
-    }
+    if (e.dataTransfer.files?.[0]) processFile(e.dataTransfer.files[0]);
   }, []);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      processFile(e.target.files[0]);
-    }
+    if (e.target.files?.[0]) processFile(e.target.files[0]);
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "extracted":
         return (
-          <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+          <Badge className="bg-green-500 hover:bg-green-600">
             <CheckCircle2 className="w-3 h-3 mr-1" /> Extracted
           </Badge>
         );
@@ -293,10 +443,7 @@ export default function Inbox() {
         );
       case "processing":
         return (
-          <Badge
-            variant="secondary"
-            className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-          >
+          <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
             <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Processing
           </Badge>
         );
@@ -310,16 +457,13 @@ export default function Inbox() {
   };
 
   const getSourceBadge = (email: { senderEmail?: string | null; subject?: string | null }) => {
-    const isWebhook = email.senderEmail && !email.subject?.startsWith("Uploaded:");
-    if (isWebhook) {
-      return (
-        <Badge variant="outline" className="text-[10px] px-1 py-0 border-violet-300 text-violet-600">
-          <Webhook className="w-2.5 h-2.5 mr-0.5" /> Email
-        </Badge>
-      );
-    }
-    return (
-      <Badge variant="outline" className="text-[10px] px-1 py-0 border-slate-300 text-slate-500">
+    const isEmail = email.senderEmail && !email.subject?.startsWith("Uploaded:");
+    return isEmail ? (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-300 text-violet-600">
+        <Mail className="w-2.5 h-2.5 mr-0.5" /> Email
+      </Badge>
+    ) : (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-slate-300 text-slate-500">
         <UploadCloud className="w-2.5 h-2.5 mr-0.5" /> Upload
       </Badge>
     );
@@ -332,52 +476,32 @@ export default function Inbox() {
         <p className="text-muted-foreground">Upload PDFs or receive quotations by email automatically.</p>
       </div>
 
-      <WebhookSetupPanel />
+      <ImapStatusPanel />
 
       <Card
         className={`border-2 border-dashed transition-all duration-200 ease-in-out ${
-          isDragging
-            ? "border-primary bg-primary/5 shadow-md"
-            : "border-border hover:border-primary/50 hover:bg-muted/50"
+          isDragging ? "border-primary bg-primary/5 shadow-md" : "border-border hover:border-primary/50 hover:bg-muted/50"
         } ${isUploading ? "pointer-events-none opacity-80" : ""}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 text-primary">
-            {isUploading ? (
-              <Loader2 className="w-8 h-8 animate-spin" />
-            ) : (
-              <UploadCloud className="w-8 h-8" />
-            )}
+        <CardContent className="flex flex-col items-center justify-center p-10 text-center">
+          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-4 text-primary">
+            {isUploading ? <Loader2 className="w-7 h-7 animate-spin" /> : <UploadCloud className="w-7 h-7" />}
           </div>
-
-          <h3 className="text-xl font-semibold mb-2">
-            {isUploading ? uploadProgress : "Drop your quotation PDF here"}
+          <h3 className="text-lg font-semibold mb-1">
+            {isUploading ? uploadProgress : "Or upload a PDF manually"}
           </h3>
-
           {!isUploading && (
             <>
-              <p className="text-sm text-muted-foreground mb-6 max-w-md">
-                The AI will automatically extract supplier details, items, pricing, and terms.
+              <p className="text-sm text-muted-foreground mb-5 max-w-md">
+                Drag and drop or select a PDF — AI will extract all supplier and pricing details.
               </p>
-
-              <div className="flex items-center gap-4">
-                <Button
-                  onClick={() => document.getElementById("pdf-upload")?.click()}
-                  className="relative"
-                >
-                  Select File
-                </Button>
-                <input
-                  id="pdf-upload"
-                  type="file"
-                  accept="application/pdf"
-                  className="hidden"
-                  onChange={handleFileInput}
-                />
-              </div>
+              <Button onClick={() => document.getElementById("pdf-upload")?.click()}>
+                Select File
+              </Button>
+              <input id="pdf-upload" type="file" accept="application/pdf" className="hidden" onChange={handleFileInput} />
             </>
           )}
         </CardContent>
@@ -424,9 +548,7 @@ export default function Inbox() {
                         {email.senderName || email.senderEmail || "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {email.receivedAt
-                          ? format(new Date(email.receivedAt), "MMM d, yyyy HH:mm")
-                          : "—"}
+                        {email.receivedAt ? format(new Date(email.receivedAt), "MMM d, yyyy HH:mm") : "—"}
                       </TableCell>
                       <TableCell>{getStatusBadge(email.status)}</TableCell>
                       <TableCell className="text-right">
@@ -435,21 +557,13 @@ export default function Inbox() {
                             variant="ghost"
                             size="sm"
                             className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => {
-                              if (quotationId) {
-                                setLocation(`/quotations/${quotationId}`);
-                              } else {
-                                setLocation("/quotations");
-                              }
-                            }}
+                            onClick={() => setLocation(quotationId ? `/quotations/${quotationId}` : "/quotations")}
                           >
                             View Details <ArrowRight className="w-4 h-4 ml-1" />
                           </Button>
                         )}
                         {email.status === "processing" && (
-                          <span className="text-xs text-muted-foreground italic">
-                            Extracting...
-                          </span>
+                          <span className="text-xs text-muted-foreground italic">Extracting...</span>
                         )}
                       </TableCell>
                     </TableRow>
@@ -458,7 +572,7 @@ export default function Inbox() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={6} className="h-48 text-center text-muted-foreground">
-                    No documents found. Upload a PDF or configure email integration to get started.
+                    No documents yet. Configure email integration above or upload a PDF manually.
                   </TableCell>
                 </TableRow>
               )}

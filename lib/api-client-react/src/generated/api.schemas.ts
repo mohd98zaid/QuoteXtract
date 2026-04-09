@@ -261,6 +261,20 @@ export interface ActivityItem {
   emailId?: number | null;
 }
 
+export interface ImapStatus {
+  enabled: boolean;
+  connected: boolean;
+  /** @nullable */
+  lastCheck: string | null;
+  /** @nullable */
+  lastError: string | null;
+  host: string;
+  port: number;
+  /** @nullable */
+  email: string | null;
+  pollIntervalSeconds: number;
+}
+
 export interface WebhookConfig {
   /** URL for raw RFC 822 email (Hostinger cPanel pipe) */
   rawEmailUrl: string;

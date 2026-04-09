@@ -25,6 +25,7 @@ import type {
   ErrorResponse,
   ExtractQuotationBody,
   HealthStatus,
+  ImapStatus,
   ListQuotationsParams,
   Quotation,
   QuotationItem,
@@ -1479,6 +1480,81 @@ export function useGetQuotationsBySupplier<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetQuotationsBySupplierQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get IMAP poller status
+ */
+export const getGetImapStatusUrl = () => {
+  return `/api/imap/status`;
+};
+
+export const getImapStatus = async (
+  options?: RequestInit,
+): Promise<ImapStatus> => {
+  return customFetch<ImapStatus>(getGetImapStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetImapStatusQueryKey = () => {
+  return [`/api/imap/status`] as const;
+};
+
+export const getGetImapStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getImapStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getImapStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetImapStatusQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getImapStatus>>> = ({
+    signal,
+  }) => getImapStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getImapStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetImapStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getImapStatus>>
+>;
+export type GetImapStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get IMAP poller status
+ */
+
+export function useGetImapStatus<
+  TData = Awaited<ReturnType<typeof getImapStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getImapStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetImapStatusQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

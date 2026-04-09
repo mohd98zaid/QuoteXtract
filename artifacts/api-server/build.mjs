@@ -51,6 +51,7 @@ async function buildAll() {
       "mongodb-client-encryption",
       "nodemailer",
       "mailparser",
+      "imapflow",
       "handlebars",
       "knex",
       "typeorm",

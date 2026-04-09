@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { eq } from "drizzle-orm";
 import { simpleParser } from "mailparser";
+import { getImapStatus } from "../../lib/imap-poller";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -247,6 +248,12 @@ router.post(
     res.status(200).json({ received: true, processed: results.length, results });
   },
 );
+
+// ── GET /api/imap/status ──────────────────────────────────────────────────
+// Returns current IMAP poller status for the UI.
+router.get("/imap/status", (_req: Request, res: Response): void => {
+  res.json(getImapStatus());
+});
 
 // ── GET /api/webhooks/config ──────────────────────────────────────────────
 // Returns webhook URLs and setup instructions for the UI.

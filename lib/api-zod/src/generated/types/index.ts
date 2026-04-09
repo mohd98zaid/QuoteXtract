@@ -16,6 +16,7 @@ export * from "./emailStatus";
 export * from "./errorResponse";
 export * from "./extractQuotationBody";
 export * from "./healthStatus";
+export * from "./imapStatus";
 export * from "./listQuotationsParams";
 export * from "./quotation";
 export * from "./quotationItem";
