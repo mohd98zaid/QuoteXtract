@@ -3,6 +3,7 @@ import { eq, desc, and, isNotNull } from "drizzle-orm";
 import { db, emailsTable, quotationsTable, quotationItemsTable } from "@workspace/db";
 import { extractFromPdf } from "../../lib/pdf-extractor";
 import { logger } from "../../lib/logger";
+import { restartPoller } from "../../lib/imap-poller";
 
 const router: IRouter = Router();
 
@@ -168,6 +169,14 @@ router.post("/mail/:id/read", async (req, res): Promise<void> => {
   }
   await db.update(emailsTable).set({ isRead: true }).where(eq(emailsTable.id, id));
   res.json({ success: true });
+});
+
+// ── POST /api/mail/fetch ────────────────────────────────────────────────────
+// Manually trigger an immediate IMAP poll
+router.post("/mail/fetch", (_req, res): void => {
+  restartPoller();
+  logger.info("Manual IMAP fetch triggered");
+  res.json({ success: true, message: "Fetch started" });
 });
 
 export default router;

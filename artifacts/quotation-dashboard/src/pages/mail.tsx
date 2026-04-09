@@ -34,7 +34,7 @@ import {
   getGetMailQueryKey,
   type MailItem,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,11 +78,11 @@ function avatarColor(id: number): string {
 // ── Sidebar ──────────────────────────────────────────────────────────────────
 interface SidebarProps {
   unread: number;
-  onRefresh: () => void;
-  refreshing: boolean;
+  onFetchNow: () => void;
+  fetching: boolean;
 }
 
-function Sidebar({ unread, onRefresh, refreshing }: SidebarProps) {
+function Sidebar({ unread, onFetchNow, fetching }: SidebarProps) {
   const folders = [
     { icon: Inbox, label: "Inbox", badge: unread, active: true },
     { icon: Star, label: "Starred", badge: 0 },
@@ -137,16 +137,16 @@ function Sidebar({ unread, onRefresh, refreshing }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Refresh */}
-      <div className="px-3 py-3 border-t border-white/10 shrink-0">
+      {/* Fetch now */}
+      <div className="px-3 py-3 border-t border-white/10 shrink-0 space-y-1">
         <button
           type="button"
-          onClick={onRefresh}
-          disabled={refreshing}
-          className="w-full flex items-center gap-2 text-white/50 hover:text-white text-xs px-3 py-2 rounded-lg hover:bg-white/8 transition-colors"
+          onClick={onFetchNow}
+          disabled={fetching}
+          className="w-full flex items-center gap-2 bg-white/10 hover:bg-white/15 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
         >
-          <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
-          {refreshing ? "Checking…" : "Check for new mail"}
+          <RefreshCw className={cn("w-3.5 h-3.5", fetching && "animate-spin")} />
+          {fetching ? "Fetching…" : "Fetch from Hostinger"}
         </button>
       </div>
     </div>
@@ -485,6 +485,25 @@ export default function MailPage() {
     query: { refetchInterval: 30_000 },
   });
 
+  const fetchNowMut = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/mail/fetch", { method: "POST" });
+      if (!res.ok) throw new Error("Fetch failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      // Wait 3 seconds for IMAP to complete then refresh the list
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: getListMailQueryKey() });
+        refetch();
+      }, 3000);
+      toast({ title: "Fetching mail…", description: "New emails will appear in a few seconds." });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Fetch failed", description: "Could not connect to your mailbox." });
+    },
+  });
+
   const trackMut = useTrackMailPdf();
 
   const handleTrack = async (mailId: number) => {
@@ -527,7 +546,11 @@ export default function MailPage() {
 
       {/* ── Sidebar ─────────────────────────── */}
       <div className="w-52 shrink-0">
-        <Sidebar unread={unread} onRefresh={() => refetch()} refreshing={isFetching} />
+        <Sidebar
+          unread={unread}
+          onFetchNow={() => fetchNowMut.mutate()}
+          fetching={fetchNowMut.isPending}
+        />
       </div>
 
       {/* ── Email list ──────────────────────── */}

@@ -112,10 +112,14 @@ async function pollOnce(): Promise<void> {
     const lock = await client.getMailboxLock("INBOX");
     let fetched = 0;
     try {
-      const uids = await client.search({ unseen: true }, { uid: true });
+      // Fetch emails from the last 30 days regardless of read/unread status.
+      // messageId deduplication prevents re-importing.
+      const since = new Date();
+      since.setDate(since.getDate() - 30);
+      const uids = await client.search({ since }, { uid: true });
 
       if (uids.length > 0) {
-        logger.info({ count: uids.length }, "Fetching unread IMAP emails");
+        logger.info({ count: uids.length }, "Fetching recent IMAP emails");
 
         for await (const message of client.fetch(uids, { source: true, uid: true }, { uid: true })) {
           if (!message.source) continue;
@@ -138,8 +142,7 @@ async function pollOnce(): Promise<void> {
               .where(eq(emailsTable.messageId, msgId))
               .limit(1);
             if (existing.length > 0) {
-              await client.messageFlagsAdd(String(message.uid), ["\\Seen"], { uid: true });
-              continue;
+              continue; // already imported, skip
             }
           }
 
@@ -196,8 +199,7 @@ async function pollOnce(): Promise<void> {
             fetched++;
           }
 
-          // Mark as seen in IMAP so we don't re-fetch
-          await client.messageFlagsAdd(String(message.uid), ["\\Seen"], { uid: true });
+          // Do NOT mark as \Seen — we rely on messageId deduplication instead.
         }
 
         if (fetched > 0) logger.info({ fetched }, "IMAP emails stored (pending manual tracking)");
@@ -222,7 +224,7 @@ async function pollOnce(): Promise<void> {
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-function restartPoller(): void {
+export function restartPoller(): void {
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
