@@ -23,6 +23,7 @@ import {
   ArrowDown,
   ChevronsUpDown,
   Trash2,
+  ScanLine,
 } from "lucide-react";
 import {
   useListEmails,
@@ -362,6 +363,25 @@ export default function Inbox() {
     onError: () => toast({ variant: "destructive", title: "Bulk delete failed", description: "Could not delete the selected documents." }),
   });
 
+  const scanMailMut = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/mail/scan", { method: "POST" });
+      if (!res.ok) throw new Error("Scan failed");
+      return res.json() as Promise<{ fetched: number; connected: boolean; error: string | null }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
+      if (!data.connected) {
+        toast({ variant: "destructive", title: "IMAP not connected", description: data.error ?? "Check your email credentials in Settings." });
+      } else if (data.fetched === 0) {
+        toast({ title: "Inbox up to date", description: "No new PDF emails found since the last scan." });
+      } else {
+        toast({ title: `${data.fetched} new document${data.fetched === 1 ? "" : "s"} found`, description: "New PDFs have been added to Processed Documents." });
+      }
+    },
+    onError: () => toast({ variant: "destructive", title: "Scan failed", description: "Could not connect to the mail server." }),
+  });
+
   const updateItem = (id: string, patch: Partial<FileQueueItem>) =>
     setFileQueue((q) => q.map((item) => (item.id === id ? { ...item, ...patch } : item)));
 
@@ -487,21 +507,40 @@ export default function Inbox() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-        <TabsList className="w-fit">
-          <TabsTrigger value="upload" className="flex items-center gap-2">
-            <UploadCloud className="w-4 h-4" />
-            Upload PDF
-          </TabsTrigger>
-          <TabsTrigger value="documents" className="flex items-center gap-2">
-            <FileStack className="w-4 h-4" />
-            Processed Documents
-            {processedCount > 0 && (
-              <span className="ml-1 bg-muted text-muted-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                {processedCount}
-              </span>
-            )}
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between gap-3">
+          <TabsList className="w-fit">
+            <TabsTrigger value="upload" className="flex items-center gap-2">
+              <UploadCloud className="w-4 h-4" />
+              Upload PDF
+            </TabsTrigger>
+            <TabsTrigger value="documents" className="flex items-center gap-2">
+              <FileStack className="w-4 h-4" />
+              Processed Documents
+              {processedCount > 0 && (
+                <span className="ml-1 bg-muted text-muted-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {processedCount}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          {activeTab === "documents" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 text-xs shrink-0"
+              disabled={scanMailMut.isPending}
+              onClick={() => scanMailMut.mutate()}
+            >
+              {scanMailMut.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <ScanLine className="w-3.5 h-3.5" />
+              )}
+              {scanMailMut.isPending ? "Scanning…" : "Scan Mail"}
+            </Button>
+          )}
+        </div>
 
         {/* ── Tab: Upload ────────────────────────────────── */}
         <TabsContent value="upload" className="flex-1 mt-4 flex flex-col gap-4 min-h-0">

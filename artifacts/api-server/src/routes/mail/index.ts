@@ -3,7 +3,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { db, emailsTable, quotationsTable, quotationItemsTable } from "@workspace/db";
 import { extractFromPdf } from "../../lib/pdf-extractor";
 import { logger } from "../../lib/logger";
-import { restartPoller, restorePdfFromImap } from "../../lib/imap-poller";
+import { restartPoller, restorePdfFromImap, runScan } from "../../lib/imap-poller";
 
 const router: IRouter = Router();
 
@@ -194,11 +194,21 @@ router.post("/mail/:id/read", async (req, res): Promise<void> => {
 });
 
 // ── POST /api/mail/fetch ────────────────────────────────────────────────────
-// Manually trigger an immediate IMAP poll
+// Manually trigger an immediate IMAP poll (fire-and-forget)
 router.post("/mail/fetch", (_req, res): void => {
   restartPoller();
   logger.info("Manual IMAP fetch triggered");
   res.json({ success: true, message: "Fetch started" });
+});
+
+// ── POST /api/mail/scan ────────────────────────────────────────────────────
+// Await a full IMAP scan and return { fetched, connected, error }
+// Deduplication via messageId ensures no duplicates are created.
+router.post("/mail/scan", async (_req, res): Promise<void> => {
+  logger.info("Manual IMAP scan started");
+  const result = await runScan();
+  logger.info(result, "Manual IMAP scan complete");
+  res.json({ success: true, ...result });
 });
 
 export default router;

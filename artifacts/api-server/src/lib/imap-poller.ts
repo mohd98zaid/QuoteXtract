@@ -82,13 +82,13 @@ async function getImapCredentials(): Promise<{
   return { email, password, host, port };
 }
 
-async function pollOnce(): Promise<void> {
+async function pollOnce(): Promise<number> {
   const { email, password, host, port } = await getImapCredentials();
 
   if (!email || !password) {
     status.enabled = false;
     status.lastError = null;
-    return;
+    return 0;
   }
 
   status.enabled = true;
@@ -222,10 +222,12 @@ async function pollOnce(): Promise<void> {
     }
 
     status.lastCheck = new Date().toISOString();
+    return fetched;
   } catch (err) {
     status.connected = false;
     status.lastError = err instanceof Error ? err.message : String(err);
     logger.error({ err }, "IMAP poll failed");
+    return 0;
   } finally {
     try {
       await client.logout();
@@ -233,6 +235,15 @@ async function pollOnce(): Promise<void> {
       /* ignore */
     }
   }
+}
+
+/**
+ * Run an immediate IMAP scan and return how many new documents were found.
+ * Safe to call at any time — deduplication via messageId prevents duplicates.
+ */
+export async function runScan(): Promise<{ fetched: number; connected: boolean; error: string | null }> {
+  const fetched = await pollOnce();
+  return { fetched, connected: status.connected, error: status.lastError };
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
