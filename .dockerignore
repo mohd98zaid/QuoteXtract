@@ -1,0 +1,25 @@
+# Version control
+.git
+.gitignore
+
+# Replit-specific files
+.replit
+.local
+replit.nix
+attached_assets
+
+# Build outputs (will be generated inside Docker)
+**/dist
+**/node_modules
+
+# Logs
+*.log
+/tmp
+
+# Test artifacts
+screenshots
+
+# Docker files themselves
+docker-compose.yml
+.dockerignore
+.env

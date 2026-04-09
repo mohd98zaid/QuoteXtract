@@ -7,6 +7,8 @@ import { promisify } from "util";
 const execFileAsync = promisify(execFile);
 const uploadDir = "/tmp/quotation-pdfs";
 
+const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o";
+
 export interface ExtractedQuotation {
   supplierName: string | null;
   supplierEmail: string | null;
@@ -35,7 +37,7 @@ export interface ExtractedItem {
 async function extractTextFromPdf(filePath: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync("pdftotext", ["-layout", filePath, "-"], {
-      maxBuffer: 10 * 1024 * 1024, // 10 MB
+      maxBuffer: 10 * 1024 * 1024,
     });
     return stdout.trim();
   } catch {
@@ -87,7 +89,7 @@ Quotation text:
 ${pdfText || "(No text could be extracted from this PDF — it may be scanned/image-based. Return your best estimate with extractionScore: 0.)"}`;
 
   const response = await openai.chat.completions.create({
-    model: "gpt-4o",
+    model: MODEL,
     max_completion_tokens: 8192,
     messages: [
       { role: "system", content: systemPrompt },
