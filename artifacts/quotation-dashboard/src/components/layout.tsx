@@ -163,8 +163,8 @@ export function Layout({ children }: LayoutProps) {
           </div>
         </div>
 
-        {location.startsWith("/mail") || location.startsWith("/inbox") ? (
-          // Mail/Inbox pages: full-bleed, no padding, no outer scroll
+        {location.startsWith("/mail") ? (
+          // Mail page: full-bleed, no padding, no outer scroll
           <div className="flex-1 min-h-0 overflow-hidden">
             {children}
           </div>
