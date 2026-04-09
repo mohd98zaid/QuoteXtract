@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Quotation Dashboard"
+version = "1.0.0"
+id = "artifacts/quotation-dashboard"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24976
+
+[services.development]
+run = "pnpm --filter @workspace/quotation-dashboard run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/quotation-dashboard", "run", "build" ]
+publicDir = "artifacts/quotation-dashboard/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24976"
+BASE_PATH = "/"

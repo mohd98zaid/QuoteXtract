@@ -3,13 +3,22 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Quotation PDF extraction and management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: emails
+    description: Email ingestion operations
+  - name: quotations
+    description: Quotation management operations
+  - name: items
+    description: Quotation line item operations
+  - name: analytics
+    description: Analytics and dashboard summaries
+
 paths:
   /healthz:
     get:
@@ -24,6 +33,367 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Emails ──────────────────────────────────────────────────────────────────
+  /emails:
+    get:
+      operationId: listEmails
+      tags: [emails]
+      summary: List all emails
+      responses:
+        "200":
+          description: List of emails
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Email"
+    post:
+      operationId: createEmail
+      tags: [emails]
+      summary: Upload a new email record with PDF
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEmailBody"
+      responses:
+        "201":
+          description: Created email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Email"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /emails/{id}:
+    get:
+      operationId: getEmail
+      tags: [emails]
+      summary: Get a single email by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Email detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Email"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── PDF Upload ───────────────────────────────────────────────────────────────
+  /emails/upload-pdf:
+    post:
+      operationId: uploadPdf
+      tags: [emails]
+      summary: Upload a PDF file and get back a stored file reference
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        "200":
+          description: Uploaded PDF reference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadPdfResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── AI Extraction ───────────────────────────────────────────────────────────
+  /extract:
+    post:
+      operationId: extractQuotation
+      tags: [quotations]
+      summary: Extract quotation data from a PDF using AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtractQuotationBody"
+      responses:
+        "200":
+          description: Extracted quotation data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quotation"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Quotations ───────────────────────────────────────────────────────────────
+  /quotations:
+    get:
+      operationId: listQuotations
+      tags: [quotations]
+      summary: List all quotations with optional filters
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: supplierId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: search
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of quotations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Quotation"
+
+  /quotations/{id}:
+    get:
+      operationId: getQuotation
+      tags: [quotations]
+      summary: Get a single quotation by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Quotation detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationWithItems"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateQuotation
+      tags: [quotations]
+      summary: Update a quotation (edit extracted fields or status)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQuotationBody"
+      responses:
+        "200":
+          description: Updated quotation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quotation"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteQuotation
+      tags: [quotations]
+      summary: Delete a quotation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Items ────────────────────────────────────────────────────────────────────
+  /quotations/{id}/items:
+    get:
+      operationId: listQuotationItems
+      tags: [items]
+      summary: List all line items for a quotation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuotationItem"
+
+  /items/{id}:
+    patch:
+      operationId: updateItem
+      tags: [items]
+      summary: Update a line item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateItemBody"
+      responses:
+        "200":
+          description: Updated item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteItem
+      tags: [items]
+      summary: Delete a line item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Search ───────────────────────────────────────────────────────────────────
+  /search:
+    get:
+      operationId: searchQuotations
+      tags: [quotations]
+      summary: Full-text search across quotations and items by part number or supplier
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+
+  # ── Analytics ─────────────────────────────────────────────────────────────────
+  /analytics/summary:
+    get:
+      operationId: getAnalyticsSummary
+      tags: [analytics]
+      summary: Dashboard summary (totals, status breakdown, recent activity)
+      responses:
+        "200":
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsSummary"
+
+  /analytics/by-supplier:
+    get:
+      operationId: getQuotationsBySupplier
+      tags: [analytics]
+      summary: Group quotation counts and values by supplier
+      responses:
+        "200":
+          description: Per-supplier stats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierStats"
+
+  /analytics/recent-activity:
+    get:
+      operationId: getRecentActivity
+      tags: [analytics]
+      summary: Recent quotation activity feed
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +404,314 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    # ── Email ──────────────────────────────────────────────────────────────────
+    Email:
+      type: object
+      properties:
+        id:
+          type: integer
+        senderName:
+          type: ["string", "null"]
+        senderEmail:
+          type: ["string", "null"]
+        subject:
+          type: ["string", "null"]
+        receivedAt:
+          type: ["string", "null"]
+        pdfFilename:
+          type: ["string", "null"]
+        pdfStorageKey:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, processing, extracted, failed]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateEmailBody:
+      type: object
+      properties:
+        senderName:
+          type: ["string", "null"]
+        senderEmail:
+          type: ["string", "null"]
+        subject:
+          type: ["string", "null"]
+        receivedAt:
+          type: ["string", "null"]
+        pdfFilename:
+          type: ["string", "null"]
+        pdfStorageKey:
+          type: ["string", "null"]
+      required: []
+
+    UploadPdfResponse:
+      type: object
+      properties:
+        storageKey:
+          type: string
+        filename:
+          type: string
+        url:
+          type: string
+      required:
+        - storageKey
+        - filename
+        - url
+
+    ExtractQuotationBody:
+      type: object
+      properties:
+        emailId:
+          type: integer
+        pdfStorageKey:
+          type: string
+      required:
+        - emailId
+        - pdfStorageKey
+
+    # ── Quotation ──────────────────────────────────────────────────────────────
+    Quotation:
+      type: object
+      properties:
+        id:
+          type: integer
+        emailId:
+          type: ["integer", "null"]
+        supplierName:
+          type: ["string", "null"]
+        supplierEmail:
+          type: ["string", "null"]
+        quotationNumber:
+          type: ["string", "null"]
+        quotationDate:
+          type: ["string", "null"]
+        currency:
+          type: ["string", "null"]
+        paymentTerms:
+          type: ["string", "null"]
+        deliveryTerms:
+          type: ["string", "null"]
+        totalAmount:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [draft, reviewed, approved, rejected]
+        extractionScore:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        pdfStorageKey:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - status
+        - createdAt
+        - updatedAt
+
+    QuotationWithItems:
+      allOf:
+        - $ref: "#/components/schemas/Quotation"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/QuotationItem"
+          required:
+            - items
+
+    UpdateQuotationBody:
+      type: object
+      properties:
+        supplierName:
+          type: ["string", "null"]
+        supplierEmail:
+          type: ["string", "null"]
+        quotationNumber:
+          type: ["string", "null"]
+        quotationDate:
+          type: ["string", "null"]
+        currency:
+          type: ["string", "null"]
+        paymentTerms:
+          type: ["string", "null"]
+        deliveryTerms:
+          type: ["string", "null"]
+        totalAmount:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [draft, reviewed, approved, rejected]
+        notes:
+          type: ["string", "null"]
+
+    # ── QuotationItem ──────────────────────────────────────────────────────────
+    QuotationItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        quotationId:
+          type: integer
+        partNumber:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        quantity:
+          type: ["string", "null"]
+        unitPrice:
+          type: ["string", "null"]
+        totalPrice:
+          type: ["string", "null"]
+        leadTime:
+          type: ["string", "null"]
+        moq:
+          type: ["string", "null"]
+        currency:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - quotationId
+        - createdAt
+        - updatedAt
+
+    UpdateItemBody:
+      type: object
+      properties:
+        partNumber:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        quantity:
+          type: ["string", "null"]
+        unitPrice:
+          type: ["string", "null"]
+        totalPrice:
+          type: ["string", "null"]
+        leadTime:
+          type: ["string", "null"]
+        moq:
+          type: ["string", "null"]
+        currency:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    # ── Search ─────────────────────────────────────────────────────────────────
+    SearchResults:
+      type: object
+      properties:
+        quotations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Quotation"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuotationItem"
+        total:
+          type: integer
+      required:
+        - quotations
+        - items
+        - total
+
+    # ── Analytics ──────────────────────────────────────────────────────────────
+    AnalyticsSummary:
+      type: object
+      properties:
+        totalEmails:
+          type: integer
+        totalQuotations:
+          type: integer
+        pendingExtraction:
+          type: integer
+        reviewedQuotations:
+          type: integer
+        approvedQuotations:
+          type: integer
+        avgExtractionScore:
+          type: ["number", "null"]
+        statusBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+      required:
+        - totalEmails
+        - totalQuotations
+        - pendingExtraction
+        - reviewedQuotations
+        - approvedQuotations
+        - statusBreakdown
+
+    StatusCount:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+      required:
+        - status
+        - count
+
+    SupplierStats:
+      type: object
+      properties:
+        supplierName:
+          type: string
+        quotationCount:
+          type: integer
+        totalValue:
+          type: ["string", "null"]
+      required:
+        - supplierName
+        - quotationCount
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [email_received, extraction_complete, quotation_reviewed, quotation_approved]
+        description:
+          type: string
+        timestamp:
+          type: string
+        quotationId:
+          type: ["integer", "null"]
+        emailId:
+          type: ["integer", "null"]
+      required:
+        - id
+        - type
+        - description
+        - timestamp

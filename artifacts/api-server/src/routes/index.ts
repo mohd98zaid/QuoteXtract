@@ -1,8 +1,18 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import emailsRouter from "./emails";
+import uploadRouter from "./upload";
+import extractRouter from "./extract";
+import quotationsRouter from "./quotations";
+import analyticsRouter from "./analytics";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(emailsRouter);
+router.use(uploadRouter);
+router.use(extractRouter);
+router.use(quotationsRouter);
+router.use(analyticsRouter);
 
 export default router;
