@@ -261,6 +261,13 @@ export interface ActivityItem {
   emailId?: number | null;
 }
 
+export interface ImapConfigInput {
+  email: string;
+  password: string;
+  host?: string;
+  port?: number;
+}
+
 export interface ImapStatus {
   enabled: boolean;
   connected: boolean;
@@ -309,4 +316,8 @@ export type ListQuotationsParams = {
 
 export type SearchQuotationsParams = {
   q: string;
+};
+
+export type ConfigureImap200 = {
+  success: boolean;
 };

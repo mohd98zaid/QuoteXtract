@@ -29,6 +29,7 @@ import {
   useListQuotations,
   useGetImapStatus,
   useGetWebhookConfig,
+  useConfigureImap,
   getListEmailsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -36,6 +37,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -66,6 +69,10 @@ function CopyButton({ text }: { text: string }) {
 function ImapStatusPanel() {
   const [open, setOpen] = useState(true);
   const [webhookOpen, setWebhookOpen] = useState(false);
+  const [formEmail, setFormEmail] = useState("");
+  const [formPassword, setFormPassword] = useState("");
+  const [showChangeForm, setShowChangeForm] = useState(false);
+  const { toast } = useToast();
 
   const {
     data: imap,
@@ -77,6 +84,24 @@ function ImapStatusPanel() {
   const { data: webhookConfig, isLoading: webhookLoading } = useGetWebhookConfig({
     query: { enabled: webhookOpen },
   });
+
+  const configureMut = useConfigureImap();
+
+  const handleSaveCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formEmail || !formPassword) return;
+    try {
+      await configureMut.mutateAsync({
+        data: { email: formEmail, password: formPassword },
+      });
+      toast({ title: "Credentials saved", description: "IMAP polling is now active." });
+      setFormPassword("");
+      setShowChangeForm(false);
+      refetch();
+    } catch {
+      toast({ variant: "destructive", title: "Save failed", description: "Could not save credentials. Check your email and password." });
+    }
+  };
 
   const isConfigured = imap?.enabled;
   const isConnected = imap?.connected;
@@ -131,56 +156,78 @@ function ImapStatusPanel() {
             <div className="flex items-center justify-center py-4">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
-          ) : !isConfigured ? (
-            /* Not yet configured */
-            <div className="space-y-3">
+          ) : !isConfigured || showChangeForm ? (
+            /* Not yet configured OR user clicked "Change credentials" — show form */
+            <form onSubmit={handleSaveCredentials} className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Add your Hostinger email credentials as environment secrets to enable automatic polling.
-                The server will check for new emails with PDF attachments every minute.
+                Enter your Hostinger email credentials below. The server will poll your inbox
+                every 60 seconds and automatically extract any quotation PDFs.
               </p>
-              <div className="rounded-lg border bg-background p-3 space-y-2">
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="imap-email" className="text-xs font-medium">
+                    Email address
+                  </Label>
+                  <Input
+                    id="imap-email"
+                    type="email"
+                    placeholder="quotations@yourdomain.com"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="imap-password" className="text-xs font-medium">
+                    Email password
+                  </Label>
+                  <Input
+                    id="imap-password"
+                    type="password"
+                    placeholder="Your email password"
+                    value={formPassword}
+                    onChange={(e) => setFormPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                    className="h-9 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-lg border bg-background px-3 py-2 space-y-1">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Required secrets (Settings → Secrets)
+                  Server settings (pre-configured for Hostinger)
                 </p>
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="flex flex-wrap gap-x-6 gap-y-0.5">
                   {[
-                    { key: "IMAP_EMAIL", desc: "Your Hostinger email address" },
-                    { key: "IMAP_PASSWORD", desc: "Your Hostinger email password" },
-                  ].map(({ key, desc }) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono text-foreground w-36 shrink-0">
-                        {key}
-                      </code>
-                      <span className="text-xs text-muted-foreground">{desc}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="pt-1 grid grid-cols-1 gap-1.5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-1">
-                    Optional (defaults shown)
-                  </p>
-                  {[
-                    { key: "IMAP_HOST", desc: "imap.hostinger.com" },
-                    { key: "IMAP_PORT", desc: "993" },
-                    { key: "IMAP_POLL_INTERVAL", desc: "60 (seconds)" },
-                  ].map(({ key, desc }) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono text-foreground w-36 shrink-0">
-                        {key}
-                      </code>
-                      <span className="text-xs text-muted-foreground">{desc}</span>
-                    </div>
+                    { label: "Host", value: "imap.hostinger.com" },
+                    { label: "Port", value: "993" },
+                    { label: "Encryption", value: "SSL" },
+                  ].map(({ label, value }) => (
+                    <span key={label} className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">{label}:</span> {value}
+                    </span>
                   ))}
                 </div>
               </div>
-              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2 text-xs text-blue-800 dark:text-blue-200 flex items-start gap-2">
-                <Mail className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                <span>
-                  Uses IMAP SSL on port 993 — exactly the settings Hostinger provides. No email
-                  piping or forwarding configuration needed.
-                </span>
-              </div>
-            </div>
+
+              <Button
+                type="submit"
+                size="sm"
+                disabled={configureMut.isPending || !formEmail || !formPassword}
+                className="gap-1.5"
+              >
+                {configureMut.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Wifi className="w-3.5 h-3.5" />
+                )}
+                {configureMut.isPending ? "Connecting..." : "Save & Connect"}
+              </Button>
+            </form>
           ) : (
             /* Configured — show live status */
             <div className="space-y-3">
@@ -244,16 +291,31 @@ function ImapStatusPanel() {
                 </div>
               )}
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs gap-1.5"
-                onClick={() => refetch()}
-                disabled={isFetching}
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-                Refresh status
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => refetch()}
+                  disabled={isFetching}
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5 text-muted-foreground"
+                  onClick={() => {
+                    setFormEmail(imap?.email || "");
+                    setFormPassword("");
+                    setShowChangeForm(true);
+                  }}
+                >
+                  <Settings2 className="w-3.5 h-3.5" />
+                  Change credentials
+                </Button>
+              </div>
             </div>
           )}
 

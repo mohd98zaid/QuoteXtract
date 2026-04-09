@@ -408,6 +408,20 @@ export const GetImapStatusResponse = zod.object({
 });
 
 /**
+ * @summary Save IMAP credentials and activate polling
+ */
+export const ConfigureImapBody = zod.object({
+  email: zod.string(),
+  password: zod.string(),
+  host: zod.string().optional(),
+  port: zod.number().optional(),
+});
+
+export const ConfigureImapResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
  * @summary Get webhook endpoint URLs and setup instructions
  */
 export const GetWebhookConfigResponse = zod.object({

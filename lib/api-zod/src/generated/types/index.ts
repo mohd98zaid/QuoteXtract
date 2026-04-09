@@ -9,6 +9,7 @@
 export * from "./activityItem";
 export * from "./activityItemType";
 export * from "./analyticsSummary";
+export * from "./configureImap200";
 export * from "./createEmailBody";
 export * from "./createItemBody";
 export * from "./email";
@@ -16,6 +17,7 @@ export * from "./emailStatus";
 export * from "./errorResponse";
 export * from "./extractQuotationBody";
 export * from "./healthStatus";
+export * from "./imapConfigInput";
 export * from "./imapStatus";
 export * from "./listQuotationsParams";
 export * from "./quotation";

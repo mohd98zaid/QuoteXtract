@@ -19,12 +19,14 @@ import type {
 import type {
   ActivityItem,
   AnalyticsSummary,
+  ConfigureImap200,
   CreateEmailBody,
   CreateItemBody,
   Email,
   ErrorResponse,
   ExtractQuotationBody,
   HealthStatus,
+  ImapConfigInput,
   ImapStatus,
   ListQuotationsParams,
   Quotation,
@@ -1562,6 +1564,92 @@ export function useGetImapStatus<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Save IMAP credentials and activate polling
+ */
+export const getConfigureImapUrl = () => {
+  return `/api/imap/configure`;
+};
+
+export const configureImap = async (
+  imapConfigInput: ImapConfigInput,
+  options?: RequestInit,
+): Promise<ConfigureImap200> => {
+  return customFetch<ConfigureImap200>(getConfigureImapUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(imapConfigInput),
+  });
+};
+
+export const getConfigureImapMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof configureImap>>,
+    TError,
+    { data: BodyType<ImapConfigInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof configureImap>>,
+  TError,
+  { data: BodyType<ImapConfigInput> },
+  TContext
+> => {
+  const mutationKey = ["configureImap"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof configureImap>>,
+    { data: BodyType<ImapConfigInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return configureImap(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConfigureImapMutationResult = NonNullable<
+  Awaited<ReturnType<typeof configureImap>>
+>;
+export type ConfigureImapMutationBody = BodyType<ImapConfigInput>;
+export type ConfigureImapMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Save IMAP credentials and activate polling
+ */
+export const useConfigureImap = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof configureImap>>,
+    TError,
+    { data: BodyType<ImapConfigInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof configureImap>>,
+  TError,
+  { data: BodyType<ImapConfigInput> },
+  TContext
+> => {
+  return useMutation(getConfigureImapMutationOptions(options));
+};
 
 /**
  * @summary Get webhook endpoint URLs and setup instructions

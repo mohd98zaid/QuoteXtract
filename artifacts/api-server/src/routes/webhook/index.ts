@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { eq } from "drizzle-orm";
 import { simpleParser } from "mailparser";
-import { getImapStatus } from "../../lib/imap-poller";
+import { getImapStatus, saveImapConfig } from "../../lib/imap-poller";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -250,9 +250,33 @@ router.post(
 );
 
 // ── GET /api/imap/status ──────────────────────────────────────────────────
-// Returns current IMAP poller status for the UI.
 router.get("/imap/status", (_req: Request, res: Response): void => {
   res.json(getImapStatus());
+});
+
+// ── POST /api/imap/configure ──────────────────────────────────────────────
+// Saves IMAP credentials to DB and immediately restarts the poller.
+router.post("/imap/configure", async (req: Request, res: Response): Promise<void> => {
+  const { email, password, host, port } = req.body as {
+    email?: string;
+    password?: string;
+    host?: string;
+    port?: number;
+  };
+
+  if (!email || !password) {
+    res.status(400).json({ error: "email and password are required" });
+    return;
+  }
+
+  try {
+    await saveImapConfig(email, password, host, port);
+    req.log.info({ email }, "IMAP config saved via UI");
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to save IMAP config");
+    res.status(500).json({ error: "Failed to save configuration" });
+  }
 });
 
 // ── GET /api/webhooks/config ──────────────────────────────────────────────
