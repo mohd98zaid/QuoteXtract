@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db, emailsTable, quotationsTable, quotationItemsTable } from "@workspace/db";
 import {
   CreateEmailBody,
@@ -48,6 +48,46 @@ router.get("/emails/:id", async (req, res): Promise<void> => {
   }
 
   res.json(email);
+});
+
+router.delete("/emails/bulk", async (req, res): Promise<void> => {
+  const { ids } = req.body as { ids?: unknown };
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "ids must be a non-empty array" });
+    return;
+  }
+  const numIds: number[] = ids.map(Number).filter((n) => !isNaN(n));
+  if (numIds.length === 0) {
+    res.status(400).json({ error: "No valid ids provided" });
+    return;
+  }
+
+  const allEmails = await db
+    .select()
+    .from(emailsTable)
+    .where(inArray(emailsTable.id, numIds));
+
+  for (const email of allEmails) {
+    const linkedQuotations = await db
+      .select({ id: quotationsTable.id })
+      .from(quotationsTable)
+      .where(eq(quotationsTable.emailId, email.id));
+    for (const q of linkedQuotations) {
+      await db.delete(quotationItemsTable).where(eq(quotationItemsTable.quotationId, q.id));
+    }
+    await db.delete(quotationsTable).where(eq(quotationsTable.emailId, email.id));
+  }
+
+  await db.delete(emailsTable).where(inArray(emailsTable.id, numIds));
+
+  for (const email of allEmails) {
+    if (email.pdfStorageKey) {
+      await fs.unlink(`/tmp/quotation-pdfs/${email.pdfStorageKey}`).catch(() => {});
+    }
+  }
+
+  req.log.info({ count: allEmails.length }, "Bulk deleted emails");
+  res.json({ success: true, deleted: allEmails.length });
 });
 
 router.delete("/emails/:id", async (req, res): Promise<void> => {

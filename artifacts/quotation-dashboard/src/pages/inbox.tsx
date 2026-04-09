@@ -300,6 +300,8 @@ export default function Inbox() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [sortField, setSortField] = useState<SortField | null>("received");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -329,15 +331,35 @@ export default function Inbox() {
 
   const deleteMut = useMutation({
     mutationFn: async (id: number) => {
+      setDeletingId(id);
       const res = await fetch(`/api/emails/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
       return res.json();
     },
+    onSettled: () => setDeletingId(null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
       toast({ title: "Document deleted", description: "The document and any linked quotation have been removed." });
     },
     onError: () => toast({ variant: "destructive", title: "Delete failed", description: "Could not delete the document." }),
+  });
+
+  const bulkDeleteMut = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await fetch("/api/emails/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) throw new Error("Bulk delete failed");
+      return res.json() as Promise<{ deleted: number }>;
+    },
+    onSuccess: (data) => {
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
+      toast({ title: `${data.deleted} document${data.deleted === 1 ? "" : "s"} deleted`, description: "All linked quotations have also been removed." });
+    },
+    onError: () => toast({ variant: "destructive", title: "Bulk delete failed", description: "Could not delete the selected documents." }),
   });
 
   const updateItem = (id: string, patch: Partial<FileQueueItem>) =>
@@ -599,11 +621,60 @@ export default function Inbox() {
 
         {/* ── Tab: Processed Documents ───────────────────── */}
         <TabsContent value="documents" className="flex-1 flex flex-col min-h-0 mt-4">
+          {/* Bulk delete toolbar */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 mb-2 px-3 py-2 rounded-xl bg-destructive/8 border border-destructive/20 dark:bg-destructive/15">
+              <span className="text-sm font-medium flex-1">
+                <span className="font-bold">{selectedIds.size}</span> document{selectedIds.size === 1 ? "" : "s"} selected
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Clear
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="gap-1.5 text-xs"
+                disabled={bulkDeleteMut.isPending}
+                onClick={() => {
+                  if (confirm(`Delete ${selectedIds.size} selected document${selectedIds.size === 1 ? "" : "s"} and any linked quotations?`)) {
+                    bulkDeleteMut.mutate(Array.from(selectedIds));
+                  }
+                }}
+              >
+                {bulkDeleteMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                Delete {selectedIds.size} selected
+              </Button>
+            </div>
+          )}
+
           <div className="flex-1 rounded-xl border bg-card overflow-hidden flex flex-col min-h-0">
             <div className="overflow-auto flex-1">
               <Table>
                 <TableHeader className="sticky top-0 bg-card z-10 shadow-sm">
                   <tr>
+                    {/* Select-all checkbox */}
+                    <th className="h-10 w-10 px-3 align-middle">
+                      <input
+                        type="checkbox"
+                        className="rounded border-border cursor-pointer accent-primary w-4 h-4"
+                        checked={emailsWithPdf.length > 0 && selectedIds.size === emailsWithPdf.length}
+                        ref={(el) => {
+                          if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < emailsWithPdf.length;
+                        }}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedIds(new Set(emailsWithPdf.map((em) => em.id)));
+                          } else {
+                            setSelectedIds(new Set());
+                          }
+                        }}
+                      />
+                    </th>
                     <SortableHead label="File / Subject" field="subject" current={sortField} dir={sortDir} onSort={handleSort} />
                     <SortableHead label="Source" field="source" current={sortField} dir={sortDir} onSort={handleSort} />
                     <SortableHead label="Sender" field="sender" current={sortField} dir={sortDir} onSort={handleSort} />
@@ -615,22 +686,39 @@ export default function Inbox() {
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-32 text-center">
+                      <TableCell colSpan={7} className="h-32 text-center">
                         <Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
                       </TableCell>
                     </TableRow>
                   ) : emailsWithPdf.length > 0 ? (
                     emailsWithPdf.map((email) => {
                       const quotationId = emailToQuotationId[email.id];
+                      const isSelected = selectedIds.has(email.id);
+                      const isDeleting = deletingId === email.id;
                       const canReview =
                         email.source === "imap" &&
                         (email.status === "pending" || email.status === "failed");
                       return (
                         <TableRow
                           key={email.id}
-                          className="group cursor-pointer hover:bg-muted/40 transition-colors"
+                          className={`group cursor-pointer hover:bg-muted/40 transition-colors ${isSelected ? "bg-primary/5" : ""}`}
                           onClick={() => setSelectedEmail(email)}
                         >
+                          {/* Row checkbox */}
+                          <TableCell className="w-10 px-3" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              className="rounded border-border cursor-pointer accent-primary w-4 h-4"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                setSelectedIds((prev) => {
+                                  const next = new Set(prev);
+                                  e.target.checked ? next.add(email.id) : next.delete(email.id);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
                               <File className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -676,7 +764,7 @@ export default function Inbox() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                disabled={deleteMut.isPending}
+                                disabled={isDeleting || bulkDeleteMut.isPending}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (confirm("Delete this document and any linked quotation?")) {
@@ -684,7 +772,7 @@ export default function Inbox() {
                                   }
                                 }}
                               >
-                                {deleteMut.isPending ? (
+                                {isDeleting ? (
                                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                 ) : (
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -697,7 +785,7 @@ export default function Inbox() {
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-48 text-center">
+                      <TableCell colSpan={7} className="h-48 text-center">
                         <div className="flex flex-col items-center gap-3 text-muted-foreground">
                           <FileStack className="w-10 h-10 opacity-20" />
                           <p className="text-sm">No documents yet.</p>
