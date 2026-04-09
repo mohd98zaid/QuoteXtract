@@ -19,6 +19,9 @@ import {
   ChevronRight,
   XCircle,
   Files,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUpDown,
 } from "lucide-react";
 import {
   useListEmails,
@@ -248,6 +251,42 @@ function queueStatusLabel(status: QueueStatus) {
   return "Failed";
 }
 
+type SortField = "subject" | "source" | "sender" | "received" | "status";
+type SortDir = "asc" | "desc";
+
+function SortableHead({
+  label,
+  field,
+  current,
+  dir,
+  onSort,
+  className = "",
+}: {
+  label: string;
+  field: SortField;
+  current: SortField | null;
+  dir: SortDir;
+  onSort: (f: SortField) => void;
+  className?: string;
+}) {
+  const active = current === field;
+  return (
+    <th
+      className={`h-10 px-4 text-left align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap hover:text-foreground transition-colors ${className}`}
+      onClick={() => onSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active ? (
+          dir === "asc" ? <ArrowUp className="w-3 h-3 text-primary" /> : <ArrowDown className="w-3 h-3 text-primary" />
+        ) : (
+          <ChevronsUpDown className="w-3 h-3 opacity-40" />
+        )}
+      </span>
+    </th>
+  );
+}
+
 export default function Inbox() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -258,6 +297,17 @@ export default function Inbox() {
   const [activeTab, setActiveTab] = useState("documents");
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [sortField, setSortField] = useState<SortField | null>("received");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
 
   const { data: emails, isLoading } = useListEmails();
   const { data: allQuotations } = useListQuotations({});
@@ -363,7 +413,33 @@ export default function Inbox() {
     e.target.value = "";
   };
 
-  const emailsWithPdf = (emails ?? []).filter((e) => !!e.pdfStorageKey);
+  const emailsWithPdf = useMemo(() => {
+    const filtered = (emails ?? []).filter((e) => !!e.pdfStorageKey);
+    if (!sortField) return filtered;
+    return [...filtered].sort((a, b) => {
+      let aVal = "";
+      let bVal = "";
+      if (sortField === "subject") {
+        aVal = (a.pdfFilename || a.subject || "").toLowerCase();
+        bVal = (b.pdfFilename || b.subject || "").toLowerCase();
+      } else if (sortField === "source") {
+        aVal = a.senderEmail && !a.subject?.startsWith("Uploaded:") ? "email" : "upload";
+        bVal = b.senderEmail && !b.subject?.startsWith("Uploaded:") ? "email" : "upload";
+      } else if (sortField === "sender") {
+        aVal = (a.senderName || a.senderEmail || "").toLowerCase();
+        bVal = (b.senderName || b.senderEmail || "").toLowerCase();
+      } else if (sortField === "received") {
+        aVal = a.receivedAt ?? "";
+        bVal = b.receivedAt ?? "";
+      } else if (sortField === "status") {
+        aVal = a.status ?? "";
+        bVal = b.status ?? "";
+      }
+      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [emails, sortField, sortDir]);
+
   const processedCount = emailsWithPdf.length;
   const hasQueue = fileQueue.length > 0;
 
@@ -522,14 +598,14 @@ export default function Inbox() {
             <div className="overflow-auto flex-1">
               <Table>
                 <TableHeader className="sticky top-0 bg-card z-10 shadow-sm">
-                  <TableRow>
-                    <TableHead>File / Subject</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Sender</TableHead>
-                    <TableHead>Received</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
+                  <tr>
+                    <SortableHead label="File / Subject" field="subject" current={sortField} dir={sortDir} onSort={handleSort} />
+                    <SortableHead label="Source" field="source" current={sortField} dir={sortDir} onSort={handleSort} />
+                    <SortableHead label="Sender" field="sender" current={sortField} dir={sortDir} onSort={handleSort} />
+                    <SortableHead label="Received" field="received" current={sortField} dir={sortDir} onSort={handleSort} />
+                    <SortableHead label="Status" field="status" current={sortField} dir={sortDir} onSort={handleSort} />
+                    <th className="h-10 px-4 text-right align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
+                  </tr>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
