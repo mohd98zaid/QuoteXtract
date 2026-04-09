@@ -39,7 +39,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -349,7 +348,7 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto">
         <div className="px-6 py-5 space-y-4 max-w-4xl">
           {/* Subject */}
           <h2 className="text-xl font-bold text-foreground leading-tight">
@@ -469,7 +468,7 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
             )}
           </div>
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
@@ -570,7 +569,7 @@ export default function MailPage() {
         </div>
 
         {/* Email rows */}
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -599,7 +598,7 @@ export default function MailPage() {
               />
             ))
           )}
-        </ScrollArea>
+        </div>
       </div>
 
       {/* ── Reading pane ────────────────────── */}
