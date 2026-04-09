@@ -160,34 +160,61 @@ export default function Inbox() {
         <p className="text-muted-foreground">Upload PDFs or receive quotations by email automatically.</p>
       </div>
 
-      <Card
-        className={`border-2 border-dashed transition-all duration-200 ease-in-out ${
-          isDragging ? "border-primary bg-primary/5 shadow-md" : "border-border hover:border-primary/50 hover:bg-muted/50"
-        } ${isUploading ? "pointer-events-none opacity-80" : ""}`}
+      {/* ── Upload zone (primary action) ────────────── */}
+      <div
+        className={`relative rounded-2xl border-2 border-dashed transition-all duration-200 cursor-pointer
+          ${isDragging
+            ? "border-primary bg-primary/10 shadow-lg scale-[1.01]"
+            : "border-primary/30 bg-gradient-to-br from-primary/5 via-background to-blue-50/50 dark:to-blue-950/20 hover:border-primary/60 hover:shadow-md"
+          }
+          ${isUploading ? "pointer-events-none opacity-80" : ""}
+        `}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onClick={() => !isUploading && document.getElementById("pdf-upload")?.click()}
       >
-        <CardContent className="flex flex-col items-center justify-center p-10 text-center">
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-4 text-primary">
-            {isUploading ? <Loader2 className="w-7 h-7 animate-spin" /> : <UploadCloud className="w-7 h-7" />}
+        <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
+          <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mb-5 shadow-sm transition-transform
+            ${isDragging ? "scale-110 bg-primary text-primary-foreground" : "bg-white dark:bg-card border border-border text-primary"}
+          `}>
+            {isUploading
+              ? <Loader2 className="w-9 h-9 animate-spin" />
+              : <UploadCloud className="w-9 h-9" />
+            }
           </div>
-          <h3 className="text-lg font-semibold mb-1">
-            {isUploading ? uploadProgress : "Upload a PDF manually"}
-          </h3>
-          {!isUploading && (
-            <>
-              <p className="text-sm text-muted-foreground mb-5 max-w-md">
-                Drag and drop or select a PDF — AI will extract all customer and pricing details.
+
+          {isUploading ? (
+            <div className="space-y-2">
+              <p className="text-lg font-semibold text-foreground">{uploadProgress}</p>
+              <p className="text-sm text-muted-foreground">Please wait while AI processes your document…</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xl font-bold text-foreground">
+                {isDragging ? "Drop to extract" : "Drop your quotation PDF here"}
               </p>
-              <Button onClick={() => document.getElementById("pdf-upload")?.click()}>
-                Select File
-              </Button>
-              <input id="pdf-upload" type="file" accept="application/pdf" className="hidden" onChange={handleFileInput} />
-            </>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                AI will instantly extract customer name, pricing, part numbers, and all line items.
+              </p>
+              <div className="pt-3">
+                <Button
+                  size="lg"
+                  className="gap-2 px-8"
+                  onClick={(e) => { e.stopPropagation(); document.getElementById("pdf-upload")?.click(); }}
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  Select PDF File
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground/60 pt-1">
+                Supports any text-based PDF quotation
+              </p>
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+        <input id="pdf-upload" type="file" accept="application/pdf" className="hidden" onChange={handleFileInput} />
+      </div>
 
       <Card className="flex-1 flex flex-col min-h-0">
         <div className="p-6 pb-2">

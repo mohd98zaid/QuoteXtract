@@ -177,10 +177,15 @@ interface EmailRowProps {
   starred: boolean;
   onClick: () => void;
   onStar: (id: number) => void;
+  onTrack: (id: number) => void;
+  isTracking: boolean;
 }
 
-function EmailRow({ mail, selected, starred, onClick, onStar }: EmailRowProps) {
+function EmailRow({ mail, selected, starred, onClick, onStar, onTrack, isTracking }: EmailRowProps) {
   const isUnread = !mail.isRead;
+  const hasPdf = !!mail.pdfFilename;
+  const isExtracted = mail.status === "extracted";
+  const isProcessing = mail.status === "processing";
 
   return (
     <div
@@ -240,17 +245,50 @@ function EmailRow({ mail, selected, starred, onClick, onStar }: EmailRowProps) {
           <p className="text-[11px] text-muted-foreground/70 truncate flex-1">
             {mail.bodyText?.slice(0, 80) || ""}
           </p>
-          <div className="flex items-center gap-1 shrink-0">
-            {mail.pdfFilename && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {hasPdf && !isExtracted && !isProcessing && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Paperclip className="w-3 h-3 text-muted-foreground" />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onTrack(mail.id); }}
+                    disabled={isTracking}
+                    className={cn(
+                      "hidden group-hover:flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-md transition-colors",
+                      "bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-60"
+                    )}
+                  >
+                    {isTracking ? (
+                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                    ) : (
+                      <BarChart2 className="w-2.5 h-2.5" />
+                    )}
+                    Track
+                  </button>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">PDF attached</TooltipContent>
+                <TooltipContent side="top" className="text-xs">Send PDF to Dashboard</TooltipContent>
               </Tooltip>
             )}
-            {mail.status === "extracted" && (
-              <CheckCircle2 className="w-3 h-3 text-green-500" />
+            {hasPdf && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Paperclip className={cn("w-3 h-3", isExtracted ? "text-green-500" : "text-muted-foreground")} />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {isExtracted ? "PDF tracked in dashboard" : "PDF attached"}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {isProcessing && (
+              <Loader2 className="w-3 h-3 text-violet-500 animate-spin" />
+            )}
+            {isExtracted && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <CheckCircle2 className="w-3 h-3 text-green-500" />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">Tracked in dashboard</TooltipContent>
+              </Tooltip>
             )}
           </div>
         </div>
@@ -511,6 +549,7 @@ export default function MailPage() {
   const [activeFolder, setActiveFolder] = useState<FolderName>("Inbox");
   const [starredIds, setStarredIds] = useState<Set<number>>(new Set());
   const [composeOpen, setComposeOpen] = useState(false);
+  const [trackingRowId, setTrackingRowId] = useState<number | null>(null);
 
   const { data: mails, isLoading, refetch } = useListMail({
     query: { refetchInterval: 30_000 },
@@ -549,6 +588,27 @@ export default function MailPage() {
       setLocation(`/quotations/${result.quotationId}`);
     } catch {
       toast({ variant: "destructive", title: "Tracking failed", description: "Could not extract the PDF. Try again." });
+    }
+  };
+
+  const handleTrackRow = async (mailId: number) => {
+    setTrackingRowId(mailId);
+    try {
+      const result = await trackMut.mutateAsync({ id: mailId });
+      queryClient.invalidateQueries({ queryKey: getListMailQueryKey() });
+      if (result.alreadyTracked) {
+        toast({ title: "Already tracked", description: "This PDF is already in your quotations." });
+      } else {
+        toast({
+          title: "PDF sent to Dashboard",
+          description: "Quotation extracted and ready to review.",
+        });
+      }
+      setLocation(`/quotations/${result.quotationId}`);
+    } catch {
+      toast({ variant: "destructive", title: "Tracking failed", description: "Could not extract the PDF. Try again." });
+    } finally {
+      setTrackingRowId(null);
     }
   };
 
@@ -686,6 +746,8 @@ export default function MailPage() {
                 starred={starredIds.has(mail.id)}
                 onClick={() => handleSelectMail(mail.id)}
                 onStar={handleStar}
+                onTrack={handleTrackRow}
+                isTracking={trackingRowId === mail.id}
               />
             ))
           )}
