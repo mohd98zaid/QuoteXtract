@@ -22,8 +22,18 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("sidebar_collapsed") === "true"
+  );
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const toggleCollapsed = () => {
+    setCollapsed((v) => {
+      const next = !v;
+      localStorage.setItem("sidebar_collapsed", String(next));
+      return next;
+    });
+  };
 
   useEffect(() => {
     setMobileOpen(false);
@@ -69,7 +79,7 @@ export function Layout({ children }: LayoutProps) {
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={() => setCollapsed((v) => !v)}
+            onClick={toggleCollapsed}
           >
             {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </Button>

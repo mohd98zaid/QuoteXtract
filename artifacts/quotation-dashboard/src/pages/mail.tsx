@@ -699,7 +699,14 @@ export default function MailPage() {
   const [starredIds, setStarredIds] = useState<Set<number>>(new Set());
   const [composeOpen, setComposeOpen] = useState(false);
   const [trackingRowId, setTrackingRowId] = useState<number | null>(null);
-  const [mailSidebarCollapsed, setMailSidebarCollapsed] = useState(false);
+  const [mailSidebarCollapsed, setMailSidebarCollapsed] = useState(
+    () => localStorage.getItem("mail_sidebar_collapsed") === "true"
+  );
+
+  const toggleMailSidebar = (value: boolean) => {
+    setMailSidebarCollapsed(value);
+    localStorage.setItem("mail_sidebar_collapsed", String(value));
+  };
 
   const { data: mails, isLoading, refetch } = useListMail({
     query: { refetchInterval: 30_000 },
@@ -827,7 +834,7 @@ export default function MailPage() {
           onFetchNow={() => fetchNowMut.mutate()}
           fetching={fetchNowMut.isPending}
           collapsed={mailSidebarCollapsed}
-          onToggleCollapse={() => setMailSidebarCollapsed((v) => !v)}
+          onToggleCollapse={() => toggleMailSidebar(!mailSidebarCollapsed)}
         />
       </div>
 
