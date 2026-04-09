@@ -52,14 +52,15 @@ export async function extractFromPdf(storageKey: string): Promise<ExtractedQuota
 
   const pdfText = await extractTextFromPdf(filePath);
 
-  const systemPrompt = `You are a precise data extraction assistant specializing in supplier quotation documents.
-Extract structured quotation data from the provided text. Always respond with valid JSON only — no markdown fences, no explanations.
+  const systemPrompt = `You are a precise data extraction assistant specializing in outgoing quotation documents.
+These PDFs are quotations issued BY a company TO their customers. Extract structured data accurately.
+Always respond with valid JSON only — no markdown fences, no explanations.
 For fields you cannot find, use null. Extract every line item you can identify.`;
 
-  const userPrompt = `Extract all quotation data from the following supplier quotation text and return a JSON object with this exact structure:
+  const userPrompt = `Extract all quotation data from the following quotation document and return a JSON object with this exact structure:
 {
-  "supplierName": "Company name of the supplier",
-  "supplierEmail": "supplier contact email or null",
+  "supplierName": "The CUSTOMER or BUYER the quotation is addressed TO — look for labels like 'Customer:', 'Bill To:', 'To:', 'Attn:' or the company name/address block near the top. This is NOT the company issuing the quotation. Example: if it says 'Customer\\nIndustrial Partner FZCO\\nDubai', extract 'Industrial Partner FZCO'",
+  "supplierEmail": "customer or buyer contact email, or null",
   "quotationNumber": "quotation/reference number or null",
   "quotationDate": "date in ISO format (YYYY-MM-DD) or original format, or null",
   "currency": "3-letter currency code (USD, EUR, GBP, SGD, AED, etc.) or null",
