@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { format } from "date-fns";
 import {
-  CheckCircle, XCircle, Clock, FileText, Download, Edit2, Save, X, ArrowLeft, Trash2, Plus, Maximize2, ExternalLink
+  CheckCircle, XCircle, Clock, FileText, Download, Edit2, Save, X, ArrowLeft, Trash2, Plus, Maximize2, ExternalLink, MoreHorizontal
 } from "lucide-react";
 import {
   useGetQuotation,
@@ -26,6 +26,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const EMPTY_ITEM = {
   partNumber: "",
@@ -356,9 +359,22 @@ export default function QuotationDetail() {
                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startItemEdit(item)}>
                                   <Edit2 className="w-4 h-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive" onClick={() => deleteItem(item.id)}>
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                                      <MoreHorizontal className="w-4 h-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={() => deleteItem(item.id)}
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
                             </TableCell>
                           </>
