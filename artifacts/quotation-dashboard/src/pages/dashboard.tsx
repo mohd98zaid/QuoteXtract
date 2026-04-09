@@ -39,21 +39,23 @@ interface MonthlyPoint { month: string; count: number; totalValue: number; }
 interface CurrencyPoint { currency: string; count: number; totalValue: number; }
 
 function StatCard({
-  title, value, sub, icon: Icon, style,
-}: { title: string; value: string | number; sub: string; icon: React.ElementType; style: typeof CARD_STYLES[0] }) {
+  title, value, sub, icon: Icon, style, href,
+}: { title: string; value: string | number; sub: string; icon: React.ElementType; style: typeof CARD_STYLES[0]; href: string }) {
   return (
-    <Card className={`bg-gradient-to-br ${style.gradient} border-0 shadow-lg hover-elevate`}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className={`text-sm font-medium ${style.sub}`}>{title}</CardTitle>
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${style.icon}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className={`text-3xl font-bold ${style.text}`}>{value}</div>
-        <p className={`text-xs mt-1 ${style.sub}`}>{sub}</p>
-      </CardContent>
-    </Card>
+    <Link href={href} className="block">
+      <Card className={`bg-gradient-to-br ${style.gradient} border-0 shadow-lg hover-elevate cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]`}>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className={`text-sm font-medium ${style.sub}`}>{title}</CardTitle>
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${style.icon}`}>
+            <Icon className="w-5 h-5" />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className={`text-3xl font-bold ${style.text}`}>{value}</div>
+          <p className={`text-xs mt-1 ${style.sub}`}>{sub}</p>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
@@ -146,6 +148,7 @@ export default function Dashboard() {
           sub="Received in inbox"
           icon={Mail}
           style={CARD_STYLES[0]}
+          href="/inbox"
         />
         <StatCard
           title="Quotations Extracted"
@@ -153,6 +156,7 @@ export default function Dashboard() {
           sub="Successfully processed"
           icon={FileText}
           style={CARD_STYLES[1]}
+          href="/quotations"
         />
         <StatCard
           title="AI Confidence"
@@ -160,6 +164,7 @@ export default function Dashboard() {
           sub="Avg extraction score"
           icon={Zap}
           style={CARD_STYLES[2]}
+          href="/quotations"
         />
         <StatCard
           title="Pending Action"
@@ -167,6 +172,7 @@ export default function Dashboard() {
           sub="Require manual review"
           icon={Clock}
           style={CARD_STYLES[3]}
+          href="/inbox"
         />
       </div>
 
