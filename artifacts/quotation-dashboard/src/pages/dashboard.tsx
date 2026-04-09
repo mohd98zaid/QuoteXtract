@@ -148,7 +148,7 @@ export default function Dashboard() {
           sub="Received in inbox"
           icon={Mail}
           style={CARD_STYLES[0]}
-          href="/inbox"
+          href="/mail"
         />
         <StatCard
           title="Quotations Extracted"
