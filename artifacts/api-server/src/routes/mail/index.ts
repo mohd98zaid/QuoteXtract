@@ -1,9 +1,9 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, isNotNull } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { db, emailsTable, quotationsTable, quotationItemsTable } from "@workspace/db";
 import { extractFromPdf } from "../../lib/pdf-extractor";
 import { logger } from "../../lib/logger";
-import { restartPoller } from "../../lib/imap-poller";
+import { restartPoller, restorePdfFromImap } from "../../lib/imap-poller";
 
 const router: IRouter = Router();
 
@@ -107,6 +107,28 @@ router.post("/mail/:id/track", async (req, res): Promise<void> => {
   await db.update(emailsTable).set({ status: "processing" }).where(eq(emailsTable.id, id));
 
   req.log.info({ emailId: id, pdfStorageKey: email.pdfStorageKey }, "Tracking PDF from mail");
+
+  // If the PDF file is missing from /tmp (e.g. server restarted), try to restore
+  // it from IMAP before attempting extraction.
+  const fs = await import("fs");
+  const path = await import("path");
+  const pdfPath = path.join("/tmp/quotation-pdfs", email.pdfStorageKey);
+  if (!fs.existsSync(pdfPath)) {
+    req.log.warn({ emailId: id, pdfStorageKey: email.pdfStorageKey }, "PDF missing from disk — attempting IMAP restore");
+    if (email.messageId) {
+      const restored = await restorePdfFromImap(email.messageId, email.pdfStorageKey);
+      if (!restored) {
+        req.log.error({ emailId: id }, "IMAP restore failed — PDF unavailable");
+        await db.update(emailsTable).set({ status: "failed" }).where(eq(emailsTable.id, id));
+        res.status(500).json({ error: "Could not retrieve the PDF — the original email may have been deleted from your inbox." });
+        return;
+      }
+    } else {
+      await db.update(emailsTable).set({ status: "failed" }).where(eq(emailsTable.id, id));
+      res.status(500).json({ error: "PDF file is no longer available." });
+      return;
+    }
+  }
 
   let extracted;
   try {

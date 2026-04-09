@@ -134,14 +134,27 @@ async function pollOnce(): Promise<void> {
 
           const msgId = (parsed.messageId || null) as string | null;
 
-          // Skip duplicate (already imported by messageId)
+          // Skip duplicate (already imported by messageId), but restore PDF if missing
           if (msgId) {
             const existing = await db
-              .select({ id: emailsTable.id })
+              .select({ id: emailsTable.id, pdfStorageKey: emailsTable.pdfStorageKey })
               .from(emailsTable)
               .where(eq(emailsTable.messageId, msgId))
               .limit(1);
             if (existing.length > 0) {
+              const record = existing[0];
+              if (record.pdfStorageKey && !fs.existsSync(path.join(uploadDir, record.pdfStorageKey))) {
+                // PDF was wiped (e.g. server restart) — restore it from this message
+                const pdfAtts = (parsed.attachments || []).filter(
+                  (a) =>
+                    a.contentType === "application/pdf" ||
+                    a.filename?.toLowerCase().endsWith(".pdf"),
+                );
+                if (pdfAtts.length > 0) {
+                  fs.writeFileSync(path.join(uploadDir, record.pdfStorageKey), pdfAtts[0].content);
+                  logger.info({ emailId: record.id, storageKey: record.pdfStorageKey }, "Restored missing PDF during poll");
+                }
+              }
               continue; // already imported, skip
             }
           }
@@ -250,4 +263,57 @@ export function stopImapPoller(): void {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+}
+
+/**
+ * Re-download a specific email's PDF from IMAP by messageId.
+ * Used when the PDF file has been wiped from /tmp (e.g. after server restart).
+ * Saves the PDF to the original storageKey path and returns true on success.
+ */
+export async function restorePdfFromImap(messageId: string, storageKey: string): Promise<boolean> {
+  const { email, password, host, port } = await getImapCredentials();
+  if (!email || !password) return false;
+
+  const client = new ImapFlow({
+    host,
+    port,
+    secure: true,
+    auth: { user: email, pass: password },
+    logger: false,
+  });
+
+  try {
+    await client.connect();
+    const lock = await client.getMailboxLock("INBOX");
+
+    try {
+      // Search for the message by Message-ID header
+      const uids = await client.search({ header: { "message-id": messageId } }, { uid: true });
+      if (uids.length === 0) {
+        logger.warn({ messageId }, "restorePdf: message not found in INBOX");
+        return false;
+      }
+
+      for await (const msg of client.fetch(uids, { source: true }, { uid: true })) {
+        if (!msg.source) continue;
+        const parsed = await simpleParser(msg.source);
+        const pdfAtts = (parsed.attachments || []).filter(
+          (a) => a.contentType === "application/pdf" || a.filename?.toLowerCase().endsWith(".pdf"),
+        );
+        if (pdfAtts.length > 0) {
+          fs.writeFileSync(path.join(uploadDir, storageKey), pdfAtts[0].content);
+          logger.info({ messageId, storageKey }, "PDF restored from IMAP");
+          return true;
+        }
+      }
+    } finally {
+      lock.release();
+    }
+  } catch (err) {
+    logger.error({ err, messageId }, "restorePdf failed");
+  } finally {
+    try { await client.logout(); } catch { /* ignore */ }
+  }
+
+  return false;
 }
