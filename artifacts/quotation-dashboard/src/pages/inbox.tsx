@@ -636,7 +636,7 @@ export default function Inbox() {
                           </TableCell>
                           <TableCell>{getStatusBadge(email.status)}</TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center justify-end gap-1">
                               {email.status === "extracted" && quotationId ? (
                                 <Button
                                   variant="ghost"
