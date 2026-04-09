@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
@@ -17,6 +17,8 @@ import {
   Calendar,
   Paperclip,
   ChevronRight,
+  XCircle,
+  Files,
 } from "lucide-react";
 import {
   useListEmails,
@@ -220,15 +222,42 @@ function EmailPreviewDialog({ email, quotationId, open, onClose, onTracked }: Em
   );
 }
 
+type QueueStatus = "queued" | "uploading" | "extracting" | "done" | "failed";
+
+interface FileQueueItem {
+  id: string;
+  file: File;
+  status: QueueStatus;
+  quotationId?: number;
+  error?: string;
+}
+
+function QueueStatusIcon({ status }: { status: QueueStatus }) {
+  if (status === "done") return <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />;
+  if (status === "failed") return <XCircle className="w-4 h-4 text-destructive shrink-0" />;
+  if (status === "uploading" || status === "extracting")
+    return <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />;
+  return <Clock className="w-4 h-4 text-muted-foreground shrink-0" />;
+}
+
+function queueStatusLabel(status: QueueStatus) {
+  if (status === "queued") return "Queued";
+  if (status === "uploading") return "Uploading…";
+  if (status === "extracting") return "AI Extracting…";
+  if (status === "done") return "Done";
+  return "Failed";
+}
+
 export default function Inbox() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<string>("");
+  const [fileQueue, setFileQueue] = useState<FileQueueItem[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState("documents");
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: emails, isLoading } = useListEmails();
   const { data: allQuotations } = useListQuotations({});
@@ -247,6 +276,70 @@ export default function Inbox() {
   const createEmailMut = useCreateEmail();
   const extractMut = useExtractQuotation();
 
+  const updateItem = (id: string, patch: Partial<FileQueueItem>) =>
+    setFileQueue((q) => q.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+
+  const processFiles = async (files: File[]) => {
+    const pdfs = files.filter((f) => f.type === "application/pdf");
+    const invalid = files.length - pdfs.length;
+    if (invalid > 0) {
+      toast({ variant: "destructive", title: `${invalid} file(s) skipped`, description: "Only PDF files are supported." });
+    }
+    if (pdfs.length === 0) return;
+
+    const newItems: FileQueueItem[] = pdfs.map((f) => ({
+      id: `${Date.now()}-${Math.random()}`,
+      file: f,
+      status: "queued",
+    }));
+    setFileQueue((q) => [...q, ...newItems]);
+    setIsProcessing(true);
+
+    let doneCount = 0;
+    let failCount = 0;
+    const doneQuotationIds: number[] = [];
+
+    for (const item of newItems) {
+      try {
+        updateItem(item.id, { status: "uploading" });
+        const uploadRes = await uploadPdfMut.mutateAsync({ data: { file: item.file } });
+
+        updateItem(item.id, { status: "extracting" });
+        const emailRes = await createEmailMut.mutateAsync({
+          data: {
+            subject: `Uploaded: ${item.file.name}`,
+            pdfFilename: uploadRes.filename,
+            pdfStorageKey: uploadRes.storageKey,
+            receivedAt: new Date().toISOString(),
+          },
+        });
+
+        const quotationRes = await extractMut.mutateAsync({
+          data: { emailId: emailRes.id, pdfStorageKey: uploadRes.storageKey },
+        });
+
+        updateItem(item.id, { status: "done", quotationId: quotationRes.id });
+        doneQuotationIds.push(quotationRes.id);
+        doneCount++;
+      } catch {
+        updateItem(item.id, { status: "failed", error: "Processing failed" });
+        failCount++;
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
+    setIsProcessing(false);
+
+    if (doneCount > 0 && failCount === 0) {
+      toast({ title: `${doneCount} PDF${doneCount > 1 ? "s" : ""} extracted`, description: "All quotations processed successfully." });
+      if (doneCount === 1 && doneQuotationIds.length === 1) {
+        setLocation(`/quotations/${doneQuotationIds[0]}`);
+      }
+    } else if (failCount > 0) {
+      toast({ variant: "destructive", title: `${failCount} file(s) failed`, description: `${doneCount} succeeded, ${failCount} failed.` });
+    }
+  };
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -257,50 +350,21 @@ export default function Inbox() {
     setIsDragging(false);
   }, []);
 
-  const processFile = async (file: File) => {
-    if (file.type !== "application/pdf") {
-      toast({ variant: "destructive", title: "Invalid file type", description: "Please upload a PDF file." });
-      return;
-    }
-    try {
-      setIsUploading(true);
-      setUploadProgress("Uploading PDF…");
-      const uploadRes = await uploadPdfMut.mutateAsync({ data: { file } });
-      setUploadProgress("Creating record…");
-      const emailRes = await createEmailMut.mutateAsync({
-        data: {
-          subject: `Uploaded: ${file.name}`,
-          pdfFilename: uploadRes.filename,
-          pdfStorageKey: uploadRes.storageKey,
-          receivedAt: new Date().toISOString(),
-        },
-      });
-      queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
-      setUploadProgress("Extracting data via AI…");
-      const quotationRes = await extractMut.mutateAsync({
-        data: { emailId: emailRes.id, pdfStorageKey: uploadRes.storageKey },
-      });
-      toast({ title: "Extraction complete", description: "Successfully processed the quotation." });
-      setLocation(`/quotations/${quotationRes.id}`);
-    } catch {
-      toast({ variant: "destructive", title: "Processing failed", description: "An error occurred while processing the PDF." });
-    } finally {
-      setIsUploading(false);
-      setUploadProgress("");
-    }
-  };
-
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files?.[0]) processFile(e.dataTransfer.files[0]);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) processFiles(files);
   }, []);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) processFile(e.target.files[0]);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) processFiles(files);
+    e.target.value = "";
   };
 
   const processedCount = emails?.length ?? 0;
+  const hasQueue = fileQueue.length > 0;
 
   return (
     <div className="space-y-6 flex flex-col h-full">
@@ -327,58 +391,128 @@ export default function Inbox() {
         </TabsList>
 
         {/* ── Tab: Upload ────────────────────────────────── */}
-        <TabsContent value="upload" className="flex-1 mt-4">
+        <TabsContent value="upload" className="flex-1 mt-4 flex flex-col gap-4 min-h-0">
+          {/* Drop zone */}
           <div
-            className={`relative rounded-2xl border-2 border-dashed transition-all duration-200 cursor-pointer h-full
+            className={`relative rounded-2xl border-2 border-dashed transition-all duration-200 cursor-pointer
+              ${hasQueue ? "py-6" : "flex-1"}
               ${isDragging
                 ? "border-primary bg-primary/10 shadow-lg scale-[1.005]"
                 : "border-primary/30 bg-gradient-to-br from-primary/5 via-background to-blue-50/50 dark:to-blue-950/20 hover:border-primary/60 hover:shadow-md"
               }
-              ${isUploading ? "pointer-events-none opacity-80" : ""}
+              ${isProcessing ? "pointer-events-none opacity-80" : ""}
             `}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            onClick={() => !isUploading && document.getElementById("pdf-upload")?.click()}
+            onClick={() => !isProcessing && fileInputRef.current?.click()}
           >
-            <div className="flex flex-col items-center justify-center py-20 px-6 text-center h-full">
-              <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mb-5 shadow-sm transition-transform
+            <div className={`flex flex-col items-center justify-center px-6 text-center ${hasQueue ? "py-6" : "py-20 h-full"}`}>
+              <div className={`rounded-2xl flex items-center justify-center mb-4 shadow-sm transition-transform
+                ${hasQueue ? "w-12 h-12" : "w-20 h-20 mb-5"}
                 ${isDragging ? "scale-110 bg-primary text-primary-foreground" : "bg-white dark:bg-card border border-border text-primary"}
               `}>
-                {isUploading
-                  ? <Loader2 className="w-9 h-9 animate-spin" />
-                  : <UploadCloud className="w-9 h-9" />
+                {isProcessing
+                  ? <Loader2 className={hasQueue ? "w-6 h-6 animate-spin" : "w-9 h-9 animate-spin"} />
+                  : <UploadCloud className={hasQueue ? "w-6 h-6" : "w-9 h-9"} />
                 }
               </div>
-              {isUploading ? (
-                <div className="space-y-2">
-                  <p className="text-lg font-semibold text-foreground">{uploadProgress}</p>
-                  <p className="text-sm text-muted-foreground">Please wait while AI processes your document…</p>
+              {hasQueue ? (
+                <div className="space-y-1">
+                  <p className="text-base font-semibold text-foreground">
+                    {isDragging ? "Drop more PDFs" : "Drop more PDFs or click to add"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">You can add more files while others are processing</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <p className="text-2xl font-bold text-foreground">
-                    {isDragging ? "Drop to extract" : "Drop your quotation PDF here"}
+                    {isDragging ? "Drop to extract" : "Drop your quotation PDFs here"}
                   </p>
                   <p className="text-sm text-muted-foreground max-w-sm">
-                    AI will instantly extract customer name, pricing, part numbers, and all line items.
+                    AI will extract customer name, pricing, part numbers, and line items from each PDF.
                   </p>
-                  <div className="pt-4">
+                  <div className="pt-4 flex items-center gap-3 justify-center">
                     <Button
                       size="lg"
-                      className="gap-2 px-10"
-                      onClick={(e) => { e.stopPropagation(); document.getElementById("pdf-upload")?.click(); }}
+                      className="gap-2 px-8"
+                      onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
                     >
                       <UploadCloud className="w-4 h-4" />
-                      Select PDF File
+                      Select PDF
+                    </Button>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="gap-2 px-8"
+                      onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                    >
+                      <Files className="w-4 h-4" />
+                      Bulk Upload
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground/60 pt-1">Supports any text-based PDF quotation</p>
+                  <p className="text-xs text-muted-foreground/60 pt-1">Select multiple PDFs at once for batch processing</p>
                 </div>
               )}
             </div>
-            <input id="pdf-upload" type="file" accept="application/pdf" className="hidden" onChange={handleFileInput} />
+            <input ref={fileInputRef} id="pdf-upload" type="file" accept="application/pdf" multiple className="hidden" onChange={handleFileInput} />
           </div>
+
+          {/* Queue list */}
+          {hasQueue && (
+            <div className="rounded-xl border bg-card overflow-hidden flex-1 flex flex-col min-h-0">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/30 shrink-0">
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Files className="w-4 h-4 text-primary" />
+                  Processing Queue
+                  <span className="text-xs font-normal text-muted-foreground ml-1">
+                    {fileQueue.filter((i) => i.status === "done").length}/{fileQueue.length} complete
+                  </span>
+                </div>
+                {!isProcessing && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground"
+                    onClick={() => setFileQueue([])}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+              <div className="overflow-y-auto flex-1">
+                {fileQueue.map((item) => (
+                  <div key={item.id} className="flex items-center gap-3 px-4 py-3 border-b last:border-0 hover:bg-muted/20 transition-colors">
+                    <QueueStatusIcon status={item.status} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate text-foreground">{item.file.name}</p>
+                      <p className={`text-xs mt-0.5 ${
+                        item.status === "done" ? "text-green-600 dark:text-green-400" :
+                        item.status === "failed" ? "text-destructive" :
+                        item.status === "queued" ? "text-muted-foreground" :
+                        "text-primary"
+                      }`}>
+                        {item.error ?? queueStatusLabel(item.status)}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-xs text-muted-foreground">
+                      {(item.file.size / 1024).toFixed(0)} KB
+                    </div>
+                    {item.status === "done" && item.quotationId && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs shrink-0"
+                        onClick={() => setLocation(`/quotations/${item.quotationId}`)}
+                      >
+                        View <ArrowRight className="w-3 h-3 ml-1" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Tab: Processed Documents ───────────────────── */}

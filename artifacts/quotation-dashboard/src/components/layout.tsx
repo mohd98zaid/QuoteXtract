@@ -12,9 +12,12 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useTheme } from "@/hooks/use-theme";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -26,6 +29,7 @@ export function Layout({ children }: LayoutProps) {
     () => localStorage.getItem("sidebar_collapsed") === "true"
   );
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const toggleCollapsed = () => {
     setCollapsed((v) => {
@@ -98,6 +102,25 @@ export function Layout({ children }: LayoutProps) {
       </nav>
 
       <div className={cn("p-2 border-t border-border space-y-1 shrink-0", collapsed && !mobile ? "px-2" : "px-2")}>
+        {/* Dark mode toggle */}
+        <button
+          title={collapsed && !mobile ? (theme === "dark" ? "Light mode" : "Dark mode") : undefined}
+          onClick={toggleTheme}
+          className={cn(
+            "flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium transition-colors hover:bg-muted text-foreground hover-elevate",
+            collapsed && !mobile ? "justify-center" : ""
+          )}
+        >
+          {theme === "dark" ? (
+            <Sun className="w-4 h-4 shrink-0 text-amber-500" />
+          ) : (
+            <Moon className="w-4 h-4 shrink-0 text-indigo-500" />
+          )}
+          {(!collapsed || mobile) && (
+            <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+          )}
+        </button>
+
         <Link
           href="/settings"
           title={collapsed && !mobile ? "Settings" : undefined}
@@ -170,6 +193,15 @@ export function Layout({ children }: LayoutProps) {
               Q
             </div>
             QuoteXtract
+          </div>
+          <div className="ml-auto">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleTheme}>
+              {theme === "dark" ? (
+                <Sun className="w-4 h-4 text-amber-500" />
+              ) : (
+                <Moon className="w-4 h-4 text-indigo-500" />
+              )}
+            </Button>
           </div>
         </div>
 
