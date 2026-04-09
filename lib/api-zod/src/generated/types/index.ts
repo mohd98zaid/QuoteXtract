@@ -30,3 +30,4 @@ export * from "./updateQuotationBody";
 export * from "./updateQuotationBodyStatus";
 export * from "./uploadPdfBody";
 export * from "./uploadPdfResponse";
+export * from "./webhookConfig";

@@ -261,6 +261,15 @@ export interface ActivityItem {
   emailId?: number | null;
 }
 
+export interface WebhookConfig {
+  /** URL for raw RFC 822 email (Hostinger cPanel pipe) */
+  rawEmailUrl: string;
+  /** URL for multipart form email (Mailgun / SendGrid style) */
+  multipartUrl: string;
+  secretRequired: boolean;
+  hostingerSetup: string[];
+}
+
 export type UploadPdfBody = {
   file: Blob;
 };

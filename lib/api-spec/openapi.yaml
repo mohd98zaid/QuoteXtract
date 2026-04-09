@@ -418,6 +418,20 @@ paths:
                 items:
                   $ref: "#/components/schemas/SupplierStats"
 
+  # ── Webhooks ──────────────────────────────────────────────────────────────────
+  /webhooks/config:
+    get:
+      operationId: getWebhookConfig
+      tags: [emails]
+      summary: Get webhook endpoint URLs and setup instructions
+      responses:
+        "200":
+          description: Webhook configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookConfig"
+
   /analytics/recent-activity:
     get:
       operationId: getRecentActivity
@@ -776,3 +790,24 @@ components:
         - type
         - description
         - timestamp
+
+    WebhookConfig:
+      type: object
+      properties:
+        rawEmailUrl:
+          type: string
+          description: URL for raw RFC 822 email (Hostinger cPanel pipe)
+        multipartUrl:
+          type: string
+          description: URL for multipart form email (Mailgun / SendGrid style)
+        secretRequired:
+          type: boolean
+        hostingerSetup:
+          type: array
+          items:
+            type: string
+      required:
+        - rawEmailUrl
+        - multipartUrl
+        - secretRequired
+        - hostingerSetup

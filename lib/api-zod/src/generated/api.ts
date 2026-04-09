@@ -394,6 +394,20 @@ export const GetQuotationsBySupplierResponse = zod.array(
 );
 
 /**
+ * @summary Get webhook endpoint URLs and setup instructions
+ */
+export const GetWebhookConfigResponse = zod.object({
+  rawEmailUrl: zod
+    .string()
+    .describe("URL for raw RFC 822 email (Hostinger cPanel pipe)"),
+  multipartUrl: zod
+    .string()
+    .describe("URL for multipart form email (Mailgun \/ SendGrid style)"),
+  secretRequired: zod.boolean(),
+  hostingerSetup: zod.array(zod.string()),
+});
+
+/**
  * @summary Recent quotation activity feed
  */
 export const GetRecentActivityResponseItem = zod.object({

@@ -36,6 +36,7 @@ import type {
   UpdateQuotationBody,
   UploadPdfBody,
   UploadPdfResponse,
+  WebhookConfig,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1478,6 +1479,81 @@ export function useGetQuotationsBySupplier<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetQuotationsBySupplierQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get webhook endpoint URLs and setup instructions
+ */
+export const getGetWebhookConfigUrl = () => {
+  return `/api/webhooks/config`;
+};
+
+export const getWebhookConfig = async (
+  options?: RequestInit,
+): Promise<WebhookConfig> => {
+  return customFetch<WebhookConfig>(getGetWebhookConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWebhookConfigQueryKey = () => {
+  return [`/api/webhooks/config`] as const;
+};
+
+export const getGetWebhookConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWebhookConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWebhookConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetWebhookConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getWebhookConfig>>
+  > = ({ signal }) => getWebhookConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWebhookConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWebhookConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWebhookConfig>>
+>;
+export type GetWebhookConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get webhook endpoint URLs and setup instructions
+ */
+
+export function useGetWebhookConfig<
+  TData = Awaited<ReturnType<typeof getWebhookConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWebhookConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWebhookConfigQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

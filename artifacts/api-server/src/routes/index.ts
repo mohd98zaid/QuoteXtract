@@ -5,6 +5,7 @@ import uploadRouter from "./upload";
 import extractRouter from "./extract";
 import quotationsRouter from "./quotations";
 import analyticsRouter from "./analytics";
+import webhookRouter from "./webhook";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(uploadRouter);
 router.use(extractRouter);
 router.use(quotationsRouter);
 router.use(analyticsRouter);
+router.use(webhookRouter);
 
 export default router;
