@@ -113,6 +113,30 @@ export default function QuotationsList() {
     },
   });
 
+  const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
+
+  const statusMut = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      setUpdatingStatusId(id);
+      const res = await fetch(`/api/quotations/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error("Update failed");
+      return res.json();
+    },
+    onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
+      const label = status === "draft" ? "Draft" : status === "reviewed" ? "Reviewed" : status === "approved" ? "Approved" : "Rejected";
+      toast({ title: `Status set to ${label}` });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Failed to update status" });
+    },
+    onSettled: () => setUpdatingStatusId(null),
+  });
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'approved':
@@ -229,8 +253,47 @@ export default function QuotationsList() {
                         </div>
                       ) : '-'}
                     </TableCell>
-                    <TableCell>
-                      {getStatusBadge(quotation.status)}
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Select
+                        value={quotation.status}
+                        onValueChange={(val) => statusMut.mutate({ id: quotation.id, status: val })}
+                        disabled={updatingStatusId === quotation.id}
+                      >
+                        <SelectTrigger className={`h-7 w-[130px] text-xs border px-2 gap-1 rounded-full font-medium ${
+                          quotation.status === "approved" ? "bg-green-50 border-green-300 text-green-700 dark:bg-green-950 dark:border-green-700 dark:text-green-300" :
+                          quotation.status === "rejected" ? "bg-red-50 border-red-300 text-red-700 dark:bg-red-950 dark:border-red-700 dark:text-red-300" :
+                          quotation.status === "reviewed" ? "bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:border-blue-700 dark:text-blue-300" :
+                          "bg-muted border-border text-muted-foreground"
+                        }`}>
+                          {updatingStatusId === quotation.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <SelectValue />
+                          )}
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">
+                            <span className="flex items-center gap-2">
+                              <Clock className="w-3.5 h-3.5 text-muted-foreground" /> Draft
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="reviewed">
+                            <span className="flex items-center gap-2">
+                              <CheckCircle className="w-3.5 h-3.5 text-blue-500" /> Mark Reviewed
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="rejected">
+                            <span className="flex items-center gap-2">
+                              <XCircle className="w-3.5 h-3.5 text-red-500" /> Reject
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="approved">
+                            <span className="flex items-center gap-2">
+                              <CheckCircle className="w-3.5 h-3.5 text-green-500" /> Approve
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
