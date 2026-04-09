@@ -12,6 +12,7 @@ import {
   UpdateItemBody,
   DeleteItemParams,
   SearchQuotationsQueryParams,
+  CreateItemBody,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -24,7 +25,7 @@ router.get("/quotations", async (req, res): Promise<void> => {
     return;
   }
 
-  const { status, search } = parsed.data;
+  const { status, search, emailId } = parsed.data;
 
   let query = db.select().from(quotationsTable).$dynamic();
 
@@ -39,6 +40,10 @@ router.get("/quotations", async (req, res): Promise<void> => {
         ilike(quotationsTable.quotationNumber, `%${search}%`),
       ),
     );
+  }
+
+  if (emailId) {
+    query = query.where(eq(quotationsTable.emailId, emailId));
   }
 
   const quotations = await query.orderBy(quotationsTable.createdAt);
@@ -122,6 +127,38 @@ router.delete("/quotations/:id", async (req, res): Promise<void> => {
   }
 
   res.sendStatus(204);
+});
+
+// Create a new item for a quotation
+router.post("/quotations/:id/items", async (req, res): Promise<void> => {
+  const params = ListQuotationItemsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = CreateItemBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [quotation] = await db
+    .select()
+    .from(quotationsTable)
+    .where(eq(quotationsTable.id, params.data.id));
+
+  if (!quotation) {
+    res.status(404).json({ error: "Quotation not found" });
+    return;
+  }
+
+  const [item] = await db
+    .insert(quotationItemsTable)
+    .values({ quotationId: params.data.id, ...body.data })
+    .returning();
+
+  res.status(201).json(item);
 });
 
 // List items for a quotation

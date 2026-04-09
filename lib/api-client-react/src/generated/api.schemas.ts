@@ -190,6 +190,27 @@ export interface UpdateItemBody {
   notes?: string | null;
 }
 
+export interface CreateItemBody {
+  /** @nullable */
+  partNumber?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  quantity?: string | null;
+  /** @nullable */
+  unitPrice?: string | null;
+  /** @nullable */
+  totalPrice?: string | null;
+  /** @nullable */
+  leadTime?: string | null;
+  /** @nullable */
+  moq?: string | null;
+  /** @nullable */
+  currency?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
 export interface SearchResults {
   quotations: Quotation[];
   items: QuotationItem[];
@@ -257,6 +278,10 @@ export type ListQuotationsParams = {
    * @nullable
    */
   search?: string | null;
+  /**
+   * @nullable
+   */
+  emailId?: number | null;
 };
 
 export type SearchQuotationsParams = {

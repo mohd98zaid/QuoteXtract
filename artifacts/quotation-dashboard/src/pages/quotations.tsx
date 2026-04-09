@@ -16,9 +16,7 @@ export default function QuotationsList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   
-  // Custom hook for debouncing search term could go here, for now using a simple approach
-  // Assuming useDebounce exists or we just pass searchTerm directly
-  const debouncedSearch = searchTerm; // Replace with actual debounce if available
+  const debouncedSearch = useDebounce(searchTerm, 300);
 
   const { data: quotations, isLoading } = useListQuotations({
     search: debouncedSearch || undefined,
@@ -117,19 +115,19 @@ export default function QuotationsList() {
                       {quotation.totalAmount ? `${quotation.currency || ''} ${quotation.totalAmount}` : '-'}
                     </TableCell>
                     <TableCell>
-                      {quotation.extractionScore ? (
+                      {quotation.extractionScore != null ? (
                         <div className="flex items-center gap-2">
                           <div className="w-16 h-2 rounded-full bg-secondary overflow-hidden">
-                            <div 
+                            <div
                               className={`h-full ${
-                                quotation.extractionScore > 0.8 ? 'bg-green-500' : 
-                                quotation.extractionScore > 0.6 ? 'bg-yellow-500' : 'bg-red-500'
+                                quotation.extractionScore > 80 ? 'bg-green-500' :
+                                quotation.extractionScore > 60 ? 'bg-yellow-500' : 'bg-red-500'
                               }`}
-                              style={{ width: `${quotation.extractionScore * 100}%` }}
+                              style={{ width: `${quotation.extractionScore}%` }}
                             />
                           </div>
                           <span className="text-xs text-muted-foreground">
-                            {Math.round(quotation.extractionScore * 100)}%
+                            {quotation.extractionScore}%
                           </span>
                         </div>
                       ) : '-'}

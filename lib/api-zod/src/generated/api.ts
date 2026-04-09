@@ -111,6 +111,7 @@ export const ListQuotationsQueryParams = zod.object({
   status: zod.coerce.string().nullish(),
   supplierId: zod.coerce.number().nullish(),
   search: zod.coerce.string().nullish(),
+  emailId: zod.coerce.number().nullish(),
 });
 
 export const ListQuotationsResponseItem = zod.object({
@@ -252,6 +253,25 @@ export const ListQuotationItemsResponseItem = zod.object({
 export const ListQuotationItemsResponse = zod.array(
   ListQuotationItemsResponseItem,
 );
+
+/**
+ * @summary Add a new line item to a quotation
+ */
+export const CreateItemParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CreateItemBody = zod.object({
+  partNumber: zod.string().nullish(),
+  description: zod.string().nullish(),
+  quantity: zod.string().nullish(),
+  unitPrice: zod.string().nullish(),
+  totalPrice: zod.string().nullish(),
+  leadTime: zod.string().nullish(),
+  moq: zod.string().nullish(),
+  currency: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
 
 /**
  * @summary Update a line item

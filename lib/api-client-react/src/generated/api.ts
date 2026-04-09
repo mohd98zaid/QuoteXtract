@@ -20,6 +20,7 @@ import type {
   ActivityItem,
   AnalyticsSummary,
   CreateEmailBody,
+  CreateItemBody,
   Email,
   ErrorResponse,
   ExtractQuotationBody,
@@ -978,6 +979,93 @@ export function useListQuotationItems<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Add a new line item to a quotation
+ */
+export const getCreateItemUrl = (id: number) => {
+  return `/api/quotations/${id}/items`;
+};
+
+export const createItem = async (
+  id: number,
+  createItemBody: CreateItemBody,
+  options?: RequestInit,
+): Promise<QuotationItem> => {
+  return customFetch<QuotationItem>(getCreateItemUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createItemBody),
+  });
+};
+
+export const getCreateItemMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createItem>>,
+    TError,
+    { id: number; data: BodyType<CreateItemBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createItem>>,
+  TError,
+  { id: number; data: BodyType<CreateItemBody> },
+  TContext
+> => {
+  const mutationKey = ["createItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createItem>>,
+    { id: number; data: BodyType<CreateItemBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createItem(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createItem>>
+>;
+export type CreateItemMutationBody = BodyType<CreateItemBody>;
+export type CreateItemMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Add a new line item to a quotation
+ */
+export const useCreateItem = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createItem>>,
+    TError,
+    { id: number; data: BodyType<CreateItemBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createItem>>,
+  TError,
+  { id: number; data: BodyType<CreateItemBody> },
+  TContext
+> => {
+  return useMutation(getCreateItemMutationOptions(options));
+};
 
 /**
  * @summary Update a line item

@@ -75,7 +75,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {summary?.avgExtractionScore ? `${(summary.avgExtractionScore * 100).toFixed(1)}%` : 'N/A'}
+              {summary?.avgExtractionScore != null ? `${Number(summary.avgExtractionScore).toFixed(1)}%` : 'N/A'}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               AI confidence metric

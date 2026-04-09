@@ -175,6 +175,10 @@ paths:
           in: query
           schema:
             type: ["string", "null"]
+        - name: emailId
+          in: query
+          schema:
+            type: ["integer", "null"]
       responses:
         "200":
           description: List of quotations
@@ -279,6 +283,41 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/QuotationItem"
+    post:
+      operationId: createItem
+      tags: [items]
+      summary: Add a new line item to a quotation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateItemBody"
+      responses:
+        "201":
+          description: Created item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationItem"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Quotation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /items/{id}:
     patch:
@@ -602,6 +641,28 @@ components:
         - updatedAt
 
     UpdateItemBody:
+      type: object
+      properties:
+        partNumber:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        quantity:
+          type: ["string", "null"]
+        unitPrice:
+          type: ["string", "null"]
+        totalPrice:
+          type: ["string", "null"]
+        leadTime:
+          type: ["string", "null"]
+        moq:
+          type: ["string", "null"]
+        currency:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    CreateItemBody:
       type: object
       properties:
         partNumber:

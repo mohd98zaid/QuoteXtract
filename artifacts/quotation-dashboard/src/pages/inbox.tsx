@@ -1,12 +1,13 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { UploadCloud, File, AlertCircle, CheckCircle2, Clock, Loader2, ArrowRight } from "lucide-react";
-import { 
-  useListEmails, 
-  useUploadPdf, 
-  useCreateEmail, 
+import {
+  useListEmails,
+  useUploadPdf,
+  useCreateEmail,
   useExtractQuotation,
+  useListQuotations,
   getListEmailsQueryKey
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -25,7 +26,18 @@ export default function Inbox() {
   const [uploadProgress, setUploadProgress] = useState<string>("");
 
   const { data: emails, isLoading } = useListEmails();
-  
+  const { data: allQuotations } = useListQuotations({});
+
+  const emailToQuotationId = useMemo(() => {
+    const map: Record<number, number> = {};
+    if (allQuotations) {
+      for (const q of allQuotations) {
+        if (q.emailId) map[q.emailId] = q.id;
+      }
+    }
+    return map;
+  }, [allQuotations]);
+
   const uploadPdfMut = useUploadPdf();
   const createEmailMut = useCreateEmail();
   const extractMut = useExtractQuotation();
@@ -53,15 +65,11 @@ export default function Inbox() {
     try {
       setIsUploading(true);
       setUploadProgress("Uploading PDF...");
-      
-      // 1. Upload PDF
-      const uploadRes = await uploadPdfMut.mutateAsync({ 
-        data: { file } 
-      });
-      
+
+      const uploadRes = await uploadPdfMut.mutateAsync({ data: { file } });
+
       setUploadProgress("Creating email record...");
-      
-      // 2. Create Email record
+
       const emailRes = await createEmailMut.mutateAsync({
         data: {
           subject: `Uploaded: ${file.name}`,
@@ -70,27 +78,25 @@ export default function Inbox() {
           receivedAt: new Date().toISOString()
         }
       });
-      
+
       queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
-      
+
       setUploadProgress("Extracting data via AI...");
-      
-      // 3. Extract Quotation
+
       const quotationRes = await extractMut.mutateAsync({
         data: {
           emailId: emailRes.id,
           pdfStorageKey: uploadRes.storageKey
         }
       });
-      
+
       toast({
         title: "Extraction complete",
         description: "Successfully processed the quotation.",
       });
-      
-      // Redirect to quotation detail
+
       setLocation(`/quotations/${quotationRes.id}`);
-      
+
     } catch (error) {
       console.error("Upload process failed:", error);
       toast({
@@ -107,7 +113,6 @@ export default function Inbox() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       processFile(e.dataTransfer.files[0]);
     }
@@ -139,11 +144,10 @@ export default function Inbox() {
         <p className="text-muted-foreground">Upload and process PDF quotations.</p>
       </div>
 
-      {/* Upload Zone */}
-      <Card 
+      <Card
         className={`border-2 border-dashed transition-all duration-200 ease-in-out ${
-          isDragging 
-            ? "border-primary bg-primary/5 shadow-md" 
+          isDragging
+            ? "border-primary bg-primary/5 shadow-md"
             : "border-border hover:border-primary/50 hover:bg-muted/50"
         } ${isUploading ? "pointer-events-none opacity-80" : ""}`}
         onDragOver={handleDragOver}
@@ -158,26 +162,26 @@ export default function Inbox() {
               <UploadCloud className="w-8 h-8" />
             )}
           </div>
-          
+
           <h3 className="text-xl font-semibold mb-2">
             {isUploading ? uploadProgress : "Drop your quotation PDF here"}
           </h3>
-          
+
           {!isUploading && (
             <>
               <p className="text-sm text-muted-foreground mb-6 max-w-md">
                 The AI will automatically extract supplier details, items, pricing, and terms.
               </p>
-              
+
               <div className="flex items-center gap-4">
                 <Button onClick={() => document.getElementById('pdf-upload')?.click()} className="relative">
                   Select File
                 </Button>
-                <input 
-                  id="pdf-upload" 
-                  type="file" 
-                  accept="application/pdf" 
-                  className="hidden" 
+                <input
+                  id="pdf-upload"
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
                   onChange={handleFileInput}
                 />
               </div>
@@ -186,7 +190,6 @@ export default function Inbox() {
         </CardContent>
       </Card>
 
-      {/* Recent Emails Table */}
       <Card className="flex-1 flex flex-col min-h-0">
         <div className="p-6 pb-2">
           <h2 className="text-xl font-semibold">Processed Documents</h2>
@@ -210,37 +213,42 @@ export default function Inbox() {
                   </TableCell>
                 </TableRow>
               ) : emails && emails.length > 0 ? (
-                emails.map((email) => (
-                  <TableRow key={email.id} className="group">
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <File className="w-4 h-4 text-muted-foreground" />
-                        <span className="truncate max-w-[250px]">{email.pdfFilename || email.subject || 'Untitled'}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{email.senderName || email.senderEmail || 'System Upload'}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {email.receivedAt ? format(new Date(email.receivedAt), 'MMM d, yyyy HH:mm') : '-'}
-                    </TableCell>
-                    <TableCell>{getStatusBadge(email.status)}</TableCell>
-                    <TableCell className="text-right">
-                      {email.status === 'extracted' && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => {
-                            // In a real app, we'd need to find the quotation ID associated with this email
-                            // For now we'll just redirect to quotations list to find it
-                            setLocation('/quotations');
-                          }}
-                        >
-                          View Details <ArrowRight className="w-4 h-4 ml-1" />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
+                emails.map((email) => {
+                  const quotationId = emailToQuotationId[email.id];
+                  return (
+                    <TableRow key={email.id} className="group">
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <File className="w-4 h-4 text-muted-foreground" />
+                          <span className="truncate max-w-[250px]">{email.pdfFilename || email.subject || 'Untitled'}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{email.senderName || email.senderEmail || 'System Upload'}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {email.receivedAt ? format(new Date(email.receivedAt), 'MMM d, yyyy HH:mm') : '-'}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(email.status)}</TableCell>
+                      <TableCell className="text-right">
+                        {email.status === 'extracted' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => {
+                              if (quotationId) {
+                                setLocation(`/quotations/${quotationId}`);
+                              } else {
+                                setLocation('/quotations');
+                              }
+                            }}
+                          >
+                            View Details <ArrowRight className="w-4 h-4 ml-1" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="h-48 text-center text-muted-foreground">

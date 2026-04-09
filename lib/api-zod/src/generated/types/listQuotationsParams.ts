@@ -19,4 +19,8 @@ export type ListQuotationsParams = {
    * @nullable
    */
   search?: string | null;
+  /**
+   * @nullable
+   */
+  emailId?: number | null;
 };

@@ -10,6 +10,7 @@ export * from "./activityItem";
 export * from "./activityItemType";
 export * from "./analyticsSummary";
 export * from "./createEmailBody";
+export * from "./createItemBody";
 export * from "./email";
 export * from "./emailStatus";
 export * from "./errorResponse";
