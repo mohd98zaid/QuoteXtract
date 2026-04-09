@@ -42,6 +42,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -410,14 +413,6 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
           <Tooltip>
             <TooltipTrigger asChild>
               <button type="button" className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Delete</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                 <Tag className="w-3.5 h-3.5" />
               </button>
             </TooltipTrigger>
@@ -441,14 +436,19 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs">Expand</TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <button type="button" className="p-1.5 rounded-md text-muted-foreground hover:bg-muted transition-colors">
                 <MoreHorizontal className="w-3.5 h-3.5" />
               </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">More</TooltipContent>
-          </Tooltip>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem className="text-destructive focus:text-destructive">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
