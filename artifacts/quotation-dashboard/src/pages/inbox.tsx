@@ -558,7 +558,7 @@ export default function Inbox() {
           {!isUploading && (
             <>
               <p className="text-sm text-muted-foreground mb-5 max-w-md">
-                Drag and drop or select a PDF — AI will extract all supplier and pricing details.
+                Drag and drop or select a PDF — AI will extract all customer and pricing details.
               </p>
               <Button onClick={() => document.getElementById("pdf-upload")?.click()}>
                 Select File

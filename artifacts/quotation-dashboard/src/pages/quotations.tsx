@@ -40,14 +40,14 @@ export default function QuotationsList() {
     <div className="space-y-6 flex flex-col h-full">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Quotations</h1>
-        <p className="text-muted-foreground">Manage and review extracted supplier quotations.</p>
+        <p className="text-muted-foreground">Manage and review extracted customer quotations.</p>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
         <div className="relative w-full sm:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input 
-            placeholder="Search supplier, ref number..." 
+            placeholder="Search customer, ref number..." 
             className="pl-9 w-full"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -76,7 +76,7 @@ export default function QuotationsList() {
           <Table>
             <TableHeader className="sticky top-0 bg-card z-10 shadow-sm">
               <TableRow>
-                <TableHead className="w-[200px]">Supplier</TableHead>
+                <TableHead className="w-[200px]">Customer</TableHead>
                 <TableHead>Quote Ref</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-right">Total Amount</TableHead>
@@ -103,7 +103,7 @@ export default function QuotationsList() {
                 quotations.map((quotation) => (
                   <TableRow key={quotation.id} className="group hover:bg-muted/50 cursor-pointer">
                     <TableCell className="font-medium">
-                      {quotation.supplierName || 'Unknown Supplier'}
+                      {quotation.supplierName || 'Unknown Customer'}
                     </TableCell>
                     <TableCell className="font-mono text-sm text-muted-foreground">
                       {quotation.quotationNumber || '-'}

@@ -100,9 +100,9 @@ export default function Dashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="lg:col-span-4 flex flex-col">
           <CardHeader>
-            <CardTitle>Top Suppliers by Quotation Volume</CardTitle>
+            <CardTitle>Top Customers by Quotation Volume</CardTitle>
             <CardDescription>
-              Number of quotations processed per supplier
+              Number of quotations processed per customer
             </CardDescription>
           </CardHeader>
           <CardContent className="flex-1 min-h-[300px]">
@@ -132,7 +132,7 @@ export default function Dashboard() {
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-muted-foreground">
-                No supplier data available
+                No customer data available
               </div>
             )}
           </CardContent>

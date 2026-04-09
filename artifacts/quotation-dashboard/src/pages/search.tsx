@@ -30,14 +30,14 @@ export default function Search() {
       <div className="text-center py-10">
         <h1 className="text-4xl font-bold tracking-tight text-foreground mb-4">Global Search</h1>
         <p className="text-muted-foreground text-lg mb-8 max-w-2xl mx-auto">
-          Search across all quotation records, suppliers, line items, and part numbers.
+          Search across all quotation records, customers, line items, and part numbers.
         </p>
         
         <form onSubmit={handleSearch} className="relative max-w-2xl mx-auto flex gap-2">
           <div className="relative flex-1">
             <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input 
-              placeholder="Enter part number, supplier, or description..." 
+              placeholder="Enter part number, customer, or description..." 
               className="pl-12 h-14 text-lg rounded-xl shadow-sm border-2 focus-visible:ring-primary/20 focus-visible:border-primary"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -86,7 +86,7 @@ export default function Search() {
                           <CardContent className="p-4 flex items-center justify-between">
                             <div className="flex flex-col">
                               <div className="flex items-center gap-2 mb-1">
-                                <span className="font-bold text-lg">{quotation.supplierName || 'Unknown Supplier'}</span>
+                                <span className="font-bold text-lg">{quotation.supplierName || 'Unknown Customer'}</span>
                                 <Badge variant="outline" className="font-mono text-xs">{quotation.quotationNumber}</Badge>
                               </div>
                               <span className="text-muted-foreground text-sm">
