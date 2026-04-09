@@ -91,11 +91,6 @@ export function Layout({ children }: LayoutProps) {
       </div>
 
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-        {!collapsed && !mobile && (
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
-            Menu
-          </div>
-        )}
         {navItems.map((item) => (
           <NavLink key={item.href} href={item.href} label={item.label} Icon={item.icon} />
         ))}
