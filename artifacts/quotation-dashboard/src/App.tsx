@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/layout";
 import Dashboard from "@/pages/dashboard";
 import Inbox from "@/pages/inbox";
+import MailPage from "@/pages/mail";
 import QuotationsList from "@/pages/quotations";
 import QuotationDetail from "@/pages/quotation-detail";
 import Search from "@/pages/search";
@@ -25,6 +26,7 @@ function Router() {
     <Layout>
       <Switch>
         <Route path="/" component={Dashboard} />
+        <Route path="/mail" component={MailPage} />
         <Route path="/inbox" component={Inbox} />
         <Route path="/quotations" component={QuotationsList} />
         <Route path="/quotations/:id" component={QuotationDetail} />

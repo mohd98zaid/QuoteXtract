@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -10,6 +10,11 @@ export const emailsTable = pgTable("emails", {
   receivedAt: text("received_at"),
   pdfFilename: text("pdf_filename"),
   pdfStorageKey: text("pdf_storage_key"),
+  bodyText: text("body_text"),
+  bodyHtml: text("body_html"),
+  isRead: boolean("is_read").notNull().default(false),
+  messageId: text("message_id"),
+  source: text("source", { enum: ["upload", "imap", "webhook"] }).notNull().default("upload"),
   status: text("status", { enum: ["pending", "processing", "extracted", "failed"] })
     .notNull()
     .default("pending"),

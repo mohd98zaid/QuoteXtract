@@ -418,6 +418,77 @@ paths:
                 items:
                   $ref: "#/components/schemas/SupplierStats"
 
+  # ── Mail Reader ───────────────────────────────────────────────────────────────
+  /mail:
+    get:
+      operationId: listMail
+      tags: [emails]
+      summary: List all IMAP-fetched emails
+      responses:
+        "200":
+          description: List of emails
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MailItem"
+
+  /mail/{id}:
+    get:
+      operationId: getMail
+      tags: [emails]
+      summary: Get a single email with full body (marks as read)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Email with body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MailDetail"
+        "404":
+          description: Not found
+
+  /mail/{id}/track:
+    post:
+      operationId: trackMailPdf
+      tags: [emails]
+      summary: Extract PDF from email and add to quotation tracker
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Track result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrackResult"
+
+  /mail/{id}/read:
+    post:
+      operationId: markMailRead
+      tags: [emails]
+      summary: Mark email as read
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+
   # ── IMAP ──────────────────────────────────────────────────────────────────────
   /imap/status:
     get:
@@ -827,6 +898,63 @@ components:
         - type
         - description
         - timestamp
+
+    MailItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        senderName:
+          type: ["string", "null"]
+        senderEmail:
+          type: ["string", "null"]
+        subject:
+          type: ["string", "null"]
+        receivedAt:
+          type: ["string", "null"]
+        pdfFilename:
+          type: ["string", "null"]
+        pdfStorageKey:
+          type: ["string", "null"]
+        isRead:
+          type: boolean
+        status:
+          type: string
+        source:
+          type: string
+        bodyText:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - isRead
+        - status
+        - source
+        - createdAt
+
+    MailDetail:
+      allOf:
+        - $ref: "#/components/schemas/MailItem"
+        - type: object
+          properties:
+            bodyHtml:
+              type: ["string", "null"]
+            messageId:
+              type: ["string", "null"]
+            quotationId:
+              type: ["integer", "null"]
+
+    TrackResult:
+      type: object
+      properties:
+        quotationId:
+          type: integer
+        alreadyTracked:
+          type: boolean
+      required:
+        - quotationId
+        - alreadyTracked
 
     ImapConfigInput:
       type: object

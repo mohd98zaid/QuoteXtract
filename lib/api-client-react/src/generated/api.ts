@@ -29,12 +29,15 @@ import type {
   ImapConfigInput,
   ImapStatus,
   ListQuotationsParams,
+  MailDetail,
+  MailItem,
   Quotation,
   QuotationItem,
   QuotationWithItems,
   SearchQuotationsParams,
   SearchResults,
   SupplierStats,
+  TrackResult,
   UpdateItemBody,
   UpdateQuotationBody,
   UploadPdfBody,
@@ -1489,6 +1492,316 @@ export function useGetQuotationsBySupplier<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List all IMAP-fetched emails
+ */
+export const getListMailUrl = () => {
+  return `/api/mail`;
+};
+
+export const listMail = async (options?: RequestInit): Promise<MailItem[]> => {
+  return customFetch<MailItem[]>(getListMailUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListMailQueryKey = () => {
+  return [`/api/mail`] as const;
+};
+
+export const getListMailQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMail>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listMail>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListMailQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listMail>>> = ({
+    signal,
+  }) => listMail({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMail>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListMailQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMail>>
+>;
+export type ListMailQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all IMAP-fetched emails
+ */
+
+export function useListMail<
+  TData = Awaited<ReturnType<typeof listMail>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listMail>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMailQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a single email with full body (marks as read)
+ */
+export const getGetMailUrl = (id: number) => {
+  return `/api/mail/${id}`;
+};
+
+export const getMail = async (
+  id: number,
+  options?: RequestInit,
+): Promise<MailDetail> => {
+  return customFetch<MailDetail>(getGetMailUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMailQueryKey = (id: number) => {
+  return [`/api/mail/${id}`] as const;
+};
+
+export const getGetMailQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMail>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getMail>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMailQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMail>>> = ({
+    signal,
+  }) => getMail(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getMail>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetMailQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMail>>
+>;
+export type GetMailQueryError = ErrorType<void>;
+
+/**
+ * @summary Get a single email with full body (marks as read)
+ */
+
+export function useGetMail<
+  TData = Awaited<ReturnType<typeof getMail>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getMail>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMailQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Extract PDF from email and add to quotation tracker
+ */
+export const getTrackMailPdfUrl = (id: number) => {
+  return `/api/mail/${id}/track`;
+};
+
+export const trackMailPdf = async (
+  id: number,
+  options?: RequestInit,
+): Promise<TrackResult> => {
+  return customFetch<TrackResult>(getTrackMailPdfUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getTrackMailPdfMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof trackMailPdf>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof trackMailPdf>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["trackMailPdf"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof trackMailPdf>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return trackMailPdf(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TrackMailPdfMutationResult = NonNullable<
+  Awaited<ReturnType<typeof trackMailPdf>>
+>;
+
+export type TrackMailPdfMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Extract PDF from email and add to quotation tracker
+ */
+export const useTrackMailPdf = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof trackMailPdf>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof trackMailPdf>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getTrackMailPdfMutationOptions(options));
+};
+
+/**
+ * @summary Mark email as read
+ */
+export const getMarkMailReadUrl = (id: number) => {
+  return `/api/mail/${id}/read`;
+};
+
+export const markMailRead = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getMarkMailReadUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getMarkMailReadMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markMailRead>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markMailRead>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["markMailRead"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markMailRead>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return markMailRead(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkMailReadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markMailRead>>
+>;
+
+export type MarkMailReadMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark email as read
+ */
+export const useMarkMailRead = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markMailRead>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markMailRead>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getMarkMailReadMutationOptions(options));
+};
 
 /**
  * @summary Get IMAP poller status

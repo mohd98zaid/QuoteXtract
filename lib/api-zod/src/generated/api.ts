@@ -394,6 +394,74 @@ export const GetQuotationsBySupplierResponse = zod.array(
 );
 
 /**
+ * @summary List all IMAP-fetched emails
+ */
+export const ListMailResponseItem = zod.object({
+  id: zod.number(),
+  senderName: zod.string().nullish(),
+  senderEmail: zod.string().nullish(),
+  subject: zod.string().nullish(),
+  receivedAt: zod.string().nullish(),
+  pdfFilename: zod.string().nullish(),
+  pdfStorageKey: zod.string().nullish(),
+  isRead: zod.boolean(),
+  status: zod.string(),
+  source: zod.string(),
+  bodyText: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListMailResponse = zod.array(ListMailResponseItem);
+
+/**
+ * @summary Get a single email with full body (marks as read)
+ */
+export const GetMailParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetMailResponse = zod
+  .object({
+    id: zod.number(),
+    senderName: zod.string().nullish(),
+    senderEmail: zod.string().nullish(),
+    subject: zod.string().nullish(),
+    receivedAt: zod.string().nullish(),
+    pdfFilename: zod.string().nullish(),
+    pdfStorageKey: zod.string().nullish(),
+    isRead: zod.boolean(),
+    status: zod.string(),
+    source: zod.string(),
+    bodyText: zod.string().nullish(),
+    createdAt: zod.string(),
+  })
+  .and(
+    zod.object({
+      bodyHtml: zod.string().nullish(),
+      messageId: zod.string().nullish(),
+      quotationId: zod.number().nullish(),
+    }),
+  );
+
+/**
+ * @summary Extract PDF from email and add to quotation tracker
+ */
+export const TrackMailPdfParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const TrackMailPdfResponse = zod.object({
+  quotationId: zod.number(),
+  alreadyTracked: zod.boolean(),
+});
+
+/**
+ * @summary Mark email as read
+ */
+export const MarkMailReadParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary Get IMAP poller status
  */
 export const GetImapStatusResponse = zod.object({

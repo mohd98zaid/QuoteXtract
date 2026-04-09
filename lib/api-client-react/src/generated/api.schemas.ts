@@ -261,6 +261,42 @@ export interface ActivityItem {
   emailId?: number | null;
 }
 
+export interface MailItem {
+  id: number;
+  /** @nullable */
+  senderName?: string | null;
+  /** @nullable */
+  senderEmail?: string | null;
+  /** @nullable */
+  subject?: string | null;
+  /** @nullable */
+  receivedAt?: string | null;
+  /** @nullable */
+  pdfFilename?: string | null;
+  /** @nullable */
+  pdfStorageKey?: string | null;
+  isRead: boolean;
+  status: string;
+  source: string;
+  /** @nullable */
+  bodyText?: string | null;
+  createdAt: string;
+}
+
+export type MailDetail = MailItem & {
+  /** @nullable */
+  bodyHtml?: string | null;
+  /** @nullable */
+  messageId?: string | null;
+  /** @nullable */
+  quotationId?: number | null;
+};
+
+export interface TrackResult {
+  quotationId: number;
+  alreadyTracked: boolean;
+}
+
 export interface ImapConfigInput {
   email: string;
   password: string;

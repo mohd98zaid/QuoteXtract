@@ -5,7 +5,8 @@ import {
   FileText, 
   Search,
   Settings,
-  LogOut
+  LogOut,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +19,8 @@ export function Layout({ children }: LayoutProps) {
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/inbox", label: "Inbox", icon: Inbox },
+    { href: "/mail", label: "Mail", icon: Mail },
+    { href: "/inbox", label: "Upload", icon: Inbox },
     { href: "/quotations", label: "Quotations", icon: FileText },
     { href: "/search", label: "Search", icon: Search },
   ];
