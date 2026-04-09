@@ -363,7 +363,8 @@ export default function Inbox() {
     e.target.value = "";
   };
 
-  const processedCount = emails?.length ?? 0;
+  const emailsWithPdf = (emails ?? []).filter((e) => !!e.pdfStorageKey);
+  const processedCount = emailsWithPdf.length;
   const hasQueue = fileQueue.length > 0;
 
   return (
@@ -537,11 +538,11 @@ export default function Inbox() {
                         <Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
                       </TableCell>
                     </TableRow>
-                  ) : emails && emails.length > 0 ? (
-                    emails.map((email) => {
+                  ) : emailsWithPdf.length > 0 ? (
+                    emailsWithPdf.map((email) => {
                       const quotationId = emailToQuotationId[email.id];
                       const canReview =
-                        email.pdfStorageKey && email.source === "imap" &&
+                        email.source === "imap" &&
                         (email.status === "pending" || email.status === "failed");
                       return (
                         <TableRow
