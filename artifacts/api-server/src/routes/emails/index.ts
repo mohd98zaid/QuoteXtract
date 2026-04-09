@@ -4,8 +4,6 @@ import { db, emailsTable } from "@workspace/db";
 import {
   CreateEmailBody,
   GetEmailParams,
-  ListEmailsResponse,
-  GetEmailResponse,
 } from "@workspace/api-zod";
 import { logger } from "../../lib/logger";
 
@@ -16,7 +14,7 @@ router.get("/emails", async (req, res): Promise<void> => {
     .select()
     .from(emailsTable)
     .orderBy(emailsTable.createdAt);
-  res.json(ListEmailsResponse.parse(emails));
+  res.json(emails);
 });
 
 router.post("/emails", async (req, res): Promise<void> => {
@@ -28,7 +26,7 @@ router.post("/emails", async (req, res): Promise<void> => {
 
   const [email] = await db.insert(emailsTable).values(parsed.data).returning();
   req.log.info({ emailId: email.id }, "Email record created");
-  res.status(201).json(GetEmailResponse.parse(email));
+  res.status(201).json(email);
 });
 
 router.get("/emails/:id", async (req, res): Promise<void> => {
@@ -48,7 +46,7 @@ router.get("/emails/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(GetEmailResponse.parse(email));
+  res.json(email);
 });
 
 export default router;
