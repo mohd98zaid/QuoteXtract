@@ -25,6 +25,8 @@ import {
   Maximize2,
   Printer,
   Tag,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   useListMail,
@@ -87,6 +89,8 @@ interface SidebarProps {
   onCompose: () => void;
   onFetchNow: () => void;
   fetching: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 function Sidebar({
@@ -97,6 +101,8 @@ function Sidebar({
   onCompose,
   onFetchNow,
   fetching,
+  collapsed,
+  onToggleCollapse,
 }: SidebarProps) {
   const folders: { icon: React.ComponentType<{ className?: string }>; label: FolderName; badge: number }[] = [
     { icon: Inbox, label: "Inbox", badge: unread },
@@ -108,46 +114,68 @@ function Sidebar({
   ];
 
   return (
-    <div className="flex flex-col h-full bg-[#1B1F3B] text-white select-none">
+    <div className={cn("flex flex-col h-full bg-[#1B1F3B] text-white select-none transition-[width] duration-200 overflow-hidden", collapsed ? "w-[52px]" : "w-52")}>
       {/* Logo row */}
-      <div className="flex items-center gap-2 px-4 py-4 border-b border-white/10 shrink-0">
-        <div className="w-7 h-7 rounded bg-violet-500 flex items-center justify-center text-white font-bold text-sm">
+      <div className="flex items-center gap-2 px-3 py-4 border-b border-white/10 shrink-0">
+        <div className="w-7 h-7 rounded bg-violet-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
           Q
         </div>
-        <span className="font-semibold text-sm tracking-tight">QuoteXtract Mail</span>
+        {!collapsed && <span className="font-semibold text-sm tracking-tight flex-1 truncate">QuoteXtract Mail</span>}
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="ml-auto text-white/40 hover:text-white transition-colors shrink-0"
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
       </div>
 
       {/* Compose */}
-      <div className="px-3 pt-4 pb-2 shrink-0">
+      <div className="px-2 pt-4 pb-2 shrink-0">
         <button
           type="button"
           onClick={onCompose}
-          className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
+          title={collapsed ? "Compose" : undefined}
+          className={cn(
+            "w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors",
+          )}
         >
           <span className="text-lg leading-none">+</span>
-          Compose
+          {!collapsed && "Compose"}
         </button>
       </div>
 
       {/* Folders */}
-      <nav className="flex-1 px-2 py-1 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-1.5 py-1 space-y-0.5 overflow-y-auto">
         {folders.map(({ icon: Icon, label, badge }) => (
           <button
             key={label}
             type="button"
             onClick={() => onFolderChange(label)}
+            title={collapsed ? label : undefined}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer",
+              "w-full flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-sm transition-colors cursor-pointer",
+              collapsed ? "justify-center" : "",
               activeFolder === label
                 ? "bg-white/15 text-white font-medium"
                 : "text-white/60 hover:bg-white/10 hover:text-white",
             )}
           >
             <Icon className="w-4 h-4 shrink-0" />
-            <span className="flex-1 text-left">{label}</span>
-            {badge > 0 && (
-              <span className="bg-violet-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                {badge}
+            {!collapsed && (
+              <>
+                <span className="flex-1 text-left">{label}</span>
+                {badge > 0 && (
+                  <span className="bg-violet-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {badge}
+                  </span>
+                )}
+              </>
+            )}
+            {collapsed && badge > 0 && (
+              <span className="absolute top-0 right-0 bg-violet-500 text-white text-[9px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center">
+                {badge > 9 ? "9+" : badge}
               </span>
             )}
           </button>
@@ -155,15 +183,19 @@ function Sidebar({
       </nav>
 
       {/* Fetch now */}
-      <div className="px-3 py-3 border-t border-white/10 shrink-0">
+      <div className="px-1.5 py-3 border-t border-white/10 shrink-0">
         <button
           type="button"
           onClick={onFetchNow}
           disabled={fetching}
-          className="w-full flex items-center gap-2 bg-white/10 hover:bg-white/15 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+          title={collapsed ? (fetching ? "Fetching…" : "Fetch from Hostinger") : undefined}
+          className={cn(
+            "w-full flex items-center gap-2 bg-white/10 hover:bg-white/15 text-white text-xs font-medium px-2.5 py-2 rounded-lg transition-colors disabled:opacity-50",
+            collapsed ? "justify-center" : "",
+          )}
         >
-          <RefreshCw className={cn("w-3.5 h-3.5", fetching && "animate-spin")} />
-          {fetching ? "Fetching…" : "Fetch from Hostinger"}
+          <RefreshCw className={cn("w-3.5 h-3.5 shrink-0", fetching && "animate-spin")} />
+          {!collapsed && (fetching ? "Fetching…" : "Fetch from Hostinger")}
         </button>
       </div>
     </div>
@@ -550,6 +582,7 @@ export default function MailPage() {
   const [starredIds, setStarredIds] = useState<Set<number>>(new Set());
   const [composeOpen, setComposeOpen] = useState(false);
   const [trackingRowId, setTrackingRowId] = useState<number | null>(null);
+  const [mailSidebarCollapsed, setMailSidebarCollapsed] = useState(false);
 
   const { data: mails, isLoading, refetch } = useListMail({
     query: { refetchInterval: 30_000 },
@@ -664,10 +697,10 @@ export default function MailPage() {
   const EmptyIcon = emptyState.icon;
 
   return (
-    <div className="flex h-full -m-4 md:-m-8 overflow-hidden rounded-none bg-background border border-border">
+    <div className="flex h-full overflow-hidden bg-background border border-border">
 
       {/* ── Sidebar ─────────────────────────── */}
-      <div className="w-52 shrink-0">
+      <div className="shrink-0 h-full">
         <Sidebar
           unread={unread}
           starredCount={starredCount}
@@ -676,6 +709,8 @@ export default function MailPage() {
           onCompose={() => setComposeOpen(true)}
           onFetchNow={() => fetchNowMut.mutate()}
           fetching={fetchNowMut.isPending}
+          collapsed={mailSidebarCollapsed}
+          onToggleCollapse={() => setMailSidebarCollapsed((v) => !v)}
         />
       </div>
 
