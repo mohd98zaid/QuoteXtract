@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, emailsTable } from "@workspace/db";
+import { db, emailsTable, quotationsTable, quotationItemsTable } from "@workspace/db";
 import {
   CreateEmailBody,
   GetEmailParams,
 } from "@workspace/api-zod";
 import { logger } from "../../lib/logger";
+import fs from "fs/promises";
 
 const router: IRouter = Router();
 
@@ -47,6 +48,43 @@ router.get("/emails/:id", async (req, res): Promise<void> => {
   }
 
   res.json(email);
+});
+
+router.delete("/emails/:id", async (req, res): Promise<void> => {
+  const params = GetEmailParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [email] = await db
+    .select()
+    .from(emailsTable)
+    .where(eq(emailsTable.id, params.data.id));
+
+  if (!email) {
+    res.status(404).json({ error: "Email not found" });
+    return;
+  }
+
+  const linkedQuotations = await db
+    .select({ id: quotationsTable.id })
+    .from(quotationsTable)
+    .where(eq(quotationsTable.emailId, email.id));
+
+  for (const q of linkedQuotations) {
+    await db.delete(quotationItemsTable).where(eq(quotationItemsTable.quotationId, q.id));
+  }
+  await db.delete(quotationsTable).where(eq(quotationsTable.emailId, email.id));
+  await db.delete(emailsTable).where(eq(emailsTable.id, email.id));
+
+  if (email.pdfStorageKey) {
+    const filePath = `/tmp/quotation-pdfs/${email.pdfStorageKey}`;
+    await fs.unlink(filePath).catch(() => {});
+  }
+
+  req.log.info({ emailId: email.id }, "Email and associated records deleted");
+  res.json({ success: true });
 });
 
 export default router;

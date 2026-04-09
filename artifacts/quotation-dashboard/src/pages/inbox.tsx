@@ -22,6 +22,7 @@ import {
   ArrowUp,
   ArrowDown,
   ChevronsUpDown,
+  Trash2,
 } from "lucide-react";
 import {
   useListEmails,
@@ -33,7 +34,7 @@ import {
   getListEmailsQueryKey,
 } from "@workspace/api-client-react";
 import type { Email } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -325,6 +326,19 @@ export default function Inbox() {
   const uploadPdfMut = useUploadPdf();
   const createEmailMut = useCreateEmail();
   const extractMut = useExtractQuotation();
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/emails/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
+      toast({ title: "Document deleted", description: "The document and any linked quotation have been removed." });
+    },
+    onError: () => toast({ variant: "destructive", title: "Delete failed", description: "Could not delete the document." }),
+  });
 
   const updateItem = (id: string, patch: Partial<FileQueueItem>) =>
     setFileQueue((q) => q.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -658,6 +672,24 @@ export default function Inbox() {
                               ) : (
                                 <ChevronRight className="w-4 h-4 text-muted-foreground" />
                               )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                disabled={deleteMut.isPending}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm("Delete this document and any linked quotation?")) {
+                                    deleteMut.mutate(email.id);
+                                  }
+                                }}
+                              >
+                                {deleteMut.isPending ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
