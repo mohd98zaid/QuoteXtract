@@ -99,4 +99,47 @@ router.get("/analytics/recent-activity", async (req, res): Promise<void> => {
   res.json(activity);
 });
 
+router.get("/analytics/monthly-trend", async (req, res): Promise<void> => {
+  const rows = await db.execute(sql`
+    SELECT
+      TO_CHAR(DATE_TRUNC('month', ${quotationsTable.createdAt}), 'Mon YY') AS month,
+      DATE_TRUNC('month', ${quotationsTable.createdAt}) AS month_date,
+      COUNT(*)::int AS count,
+      COALESCE(SUM(CAST(NULLIF(${quotationsTable.totalAmount}, '') AS NUMERIC)), 0)::float AS total_value
+    FROM ${quotationsTable}
+    WHERE ${quotationsTable.createdAt} >= NOW() - INTERVAL '6 months'
+    GROUP BY DATE_TRUNC('month', ${quotationsTable.createdAt})
+    ORDER BY month_date ASC
+  `);
+
+  res.json(
+    (rows.rows as Array<{ month: string; count: number; total_value: number }>).map((r) => ({
+      month: r.month,
+      count: Number(r.count),
+      totalValue: Number(r.total_value),
+    })),
+  );
+});
+
+router.get("/analytics/currency-breakdown", async (req, res): Promise<void> => {
+  const rows = await db
+    .select({
+      currency: quotationsTable.currency,
+      count: count(),
+      totalValue: sql<string>`COALESCE(SUM(CAST(NULLIF(${quotationsTable.totalAmount}, '') AS NUMERIC)), 0)::TEXT`,
+    })
+    .from(quotationsTable)
+    .where(sql`${quotationsTable.currency} IS NOT NULL AND ${quotationsTable.currency} != ''`)
+    .groupBy(quotationsTable.currency)
+    .orderBy(sql`SUM(CAST(NULLIF(${quotationsTable.totalAmount}, '') AS NUMERIC)) DESC NULLS LAST`);
+
+  res.json(
+    rows.map((r) => ({
+      currency: r.currency ?? "Unknown",
+      count: Number(r.count),
+      totalValue: Number(r.totalValue),
+    })),
+  );
+});
+
 export default router;
