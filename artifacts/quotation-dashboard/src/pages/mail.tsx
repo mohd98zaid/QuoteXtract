@@ -116,20 +116,36 @@ function Sidebar({
   return (
     <div className={cn("flex flex-col h-full bg-[#1B1F3B] text-white select-none transition-[width] duration-200 overflow-hidden", collapsed ? "w-[52px]" : "w-52")}>
       {/* Logo row */}
-      <div className="flex items-center gap-2 px-3 py-4 border-b border-white/10 shrink-0">
-        <div className="w-7 h-7 rounded bg-violet-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
-          Q
+      {collapsed ? (
+        <div className="flex flex-col items-center py-3 border-b border-white/10 shrink-0 gap-2">
+          <div className="w-7 h-7 rounded bg-violet-500 flex items-center justify-center text-white font-bold text-sm">
+            Q
+          </div>
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="text-white/40 hover:text-white transition-colors"
+            title="Expand sidebar"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
-        {!collapsed && <span className="font-semibold text-sm tracking-tight flex-1 truncate">QuoteXtract Mail</span>}
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          className="ml-auto text-white/40 hover:text-white transition-colors shrink-0"
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </button>
-      </div>
+      ) : (
+        <div className="flex items-center gap-2 px-3 py-4 border-b border-white/10 shrink-0">
+          <div className="w-7 h-7 rounded bg-violet-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
+            Q
+          </div>
+          <span className="font-semibold text-sm tracking-tight flex-1 truncate">QuoteXtract Mail</span>
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="text-white/40 hover:text-white transition-colors shrink-0"
+            title="Collapse sidebar"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Compose */}
       <div className="px-2 pt-4 pb-2 shrink-0">
