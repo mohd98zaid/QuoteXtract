@@ -709,7 +709,7 @@ export default function MailPage() {
   };
 
   const { data: mails, isLoading, refetch } = useListMail({
-    query: { refetchInterval: 30_000 },
+    query: { refetchInterval: 60_000 },
   });
 
   const fetchNowMut = useMutation({

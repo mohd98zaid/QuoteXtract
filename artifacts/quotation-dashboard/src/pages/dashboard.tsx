@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useGetAnalyticsSummary, useGetQuotationsBySupplier, useGetRecentActivity } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -90,6 +91,32 @@ export default function Dashboard() {
     staleTime: 60_000,
   });
 
+  const pieData = useMemo(() =>
+    summary?.statusBreakdown.map(item => ({
+      name: item.status.charAt(0).toUpperCase() + item.status.slice(1),
+      value: item.count,
+      fill: STATUS_COLORS[item.status] ?? "#94a3b8",
+    })) ?? [],
+  [summary]);
+
+  const coloredSuppliers = useMemo(() =>
+    (supplierStats ?? []).slice(0, 8).map((s, i) => ({
+      ...s,
+      fill: BAR_COLORS[i % BAR_COLORS.length],
+    })),
+  [supplierStats]);
+
+  const normalizedRadial = useMemo(() => {
+    const radialData = (currencyData ?? []).slice(0, 5).map((c, i) => ({
+      name: c.currency,
+      value: c.totalValue > 0 ? c.totalValue : c.count * 100,
+      count: c.count,
+      fill: RADIAL_COLORS[i % RADIAL_COLORS.length],
+    }));
+    const maxRadial = Math.max(...radialData.map((r) => r.value), 1);
+    return radialData.map((r) => ({ ...r, displayValue: Math.round((r.value / maxRadial) * 100) }));
+  }, [currencyData]);
+
   if (isLoadingSummary || isLoadingSuppliers || isLoadingActivity) {
     return (
       <div className="space-y-6">
@@ -108,30 +135,6 @@ export default function Dashboard() {
       </div>
     );
   }
-
-  const pieData = summary?.statusBreakdown.map(item => ({
-    name: item.status.charAt(0).toUpperCase() + item.status.slice(1),
-    value: item.count,
-    fill: STATUS_COLORS[item.status] ?? "#94a3b8",
-  })) || [];
-
-  const coloredSuppliers = (supplierStats ?? []).slice(0, 8).map((s, i) => ({
-    ...s,
-    fill: BAR_COLORS[i % BAR_COLORS.length],
-  }));
-
-  const radialData = (currencyData ?? []).slice(0, 5).map((c, i) => ({
-    name: c.currency,
-    value: c.totalValue > 0 ? c.totalValue : c.count * 100,
-    count: c.count,
-    fill: RADIAL_COLORS[i % RADIAL_COLORS.length],
-  }));
-
-  const maxRadial = Math.max(...radialData.map((r) => r.value), 1);
-  const normalizedRadial = radialData.map((r) => ({
-    ...r,
-    displayValue: Math.round((r.value / maxRadial) * 100),
-  }));
 
   return (
     <div className="space-y-6">

@@ -105,7 +105,7 @@ export default function SettingsPage() {
   const [showForm, setShowForm] = useState(false);
 
   const { data: imap, isLoading: imapLoading, refetch: refetchImap, isFetching: imapFetching } =
-    useGetImapStatus({ query: { refetchInterval: 30_000 } });
+    useGetImapStatus({ query: { refetchInterval: 60_000 } });
 
   const { data: smtp, isLoading: smtpLoading, refetch: refetchSmtp } = useQuery({
     queryKey: ["smtp-status"],
