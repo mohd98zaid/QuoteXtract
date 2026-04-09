@@ -15,12 +15,14 @@ import {
   Wifi,
   WifiOff,
   Zap,
+  Send,
 } from "lucide-react";
 import {
   useGetImapStatus,
   useGetWebhookConfig,
   useConfigureImap,
 } from "@workspace/api-client-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -384,6 +386,207 @@ function ImapSection() {
   );
 }
 
+function SmtpSection() {
+  const { toast } = useToast();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+    fromName: "",
+    host: "smtp.hostinger.com",
+    port: 465,
+    secure: true,
+  });
+
+  const { data: config, isLoading, refetch } = useQuery({
+    queryKey: ["smtp-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/smtp/status");
+      if (!res.ok) throw new Error("Failed to load SMTP status");
+      return res.json() as Promise<{ host: string; port: number; secure: boolean; email: string | null; fromName: string; configured: boolean }>;
+    },
+  });
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/smtp/configure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: form.email,
+          password: form.password,
+          fromName: form.fromName || "QuoteXtract",
+          host: form.host,
+          port: form.port,
+          secure: form.secure,
+        }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "SMTP credentials saved", description: "You can now send emails from the Compose window." });
+      setShowForm(false);
+      setForm((f) => ({ ...f, password: "" }));
+      refetch();
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Save failed", description: "Could not save SMTP credentials." });
+    },
+  });
+
+  const isConfigured = config?.configured;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+            <Send className="w-5 h-5" />
+          </div>
+          <div>
+            <CardTitle className="text-base">Outgoing Mail (SMTP)</CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Configure SMTP to send emails directly from the Compose window
+            </CardDescription>
+          </div>
+        </div>
+        {!isLoading && (
+          <Badge
+            variant={isConfigured ? "default" : "outline"}
+            className={isConfigured ? "bg-green-500 hover:bg-green-600 text-white text-xs gap-1" : "text-xs border-amber-300 text-amber-600 gap-1"}
+          >
+            {isConfigured ? <><CheckCircle2 className="w-3 h-3" /> Configured</> : <><Settings2 className="w-3 h-3" /> Setup needed</>}
+          </Badge>
+        )}
+      </CardHeader>
+
+      <CardContent className="space-y-5">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : !isConfigured || showForm ? (
+          <form
+            onSubmit={(e) => { e.preventDefault(); saveMut.mutate(); }}
+            className="space-y-4"
+          >
+            <p className="text-sm text-muted-foreground">
+              Enter your Hostinger SMTP credentials to enable sending emails from the Compose window.
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="smtp-email" className="text-xs font-medium">Email address</Label>
+                <Input
+                  id="smtp-email"
+                  type="email"
+                  placeholder="you@yourdomain.com"
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="smtp-password" className="text-xs font-medium">Email password</Label>
+                <Input
+                  id="smtp-password"
+                  type="password"
+                  placeholder="Your email password"
+                  value={form.password}
+                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="smtp-name" className="text-xs font-medium">Display name</Label>
+                <Input
+                  id="smtp-name"
+                  placeholder="QuoteXtract"
+                  value={form.fromName}
+                  onChange={(e) => setForm((f) => ({ ...f, fromName: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Server settings (pre-configured for Hostinger)
+              </p>
+              <div className="flex flex-wrap gap-x-6 gap-y-0.5">
+                {[
+                  { label: "Host", value: "smtp.hostinger.com" },
+                  { label: "Port", value: "465" },
+                  { label: "Encryption", value: "SSL/TLS" },
+                ].map(({ label, value }) => (
+                  <span key={label} className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">{label}:</span> {value}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="submit"
+                disabled={saveMut.isPending || !form.email || !form.password}
+                className="gap-1.5"
+              >
+                {saveMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {saveMut.isPending ? "Saving..." : "Save & Enable"}
+              </Button>
+              {showForm && (
+                <Button variant="ghost" type="button" onClick={() => setShowForm(false)}>Cancel</Button>
+              )}
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <StatusTile
+                label="Account"
+                value={config.email || "—"}
+                icon={<Mail className="w-4 h-4 text-muted-foreground" />}
+                mono
+                truncate
+              />
+              <StatusTile
+                label="Server"
+                value={`${config.host}:${config.port}`}
+                icon={<Settings2 className="w-4 h-4 text-muted-foreground" />}
+                mono
+              />
+              <StatusTile
+                label="Encryption"
+                value={config.secure ? "SSL/TLS" : "STARTTLS"}
+                icon={<Wifi className="w-4 h-4 text-muted-foreground" />}
+              />
+            </div>
+
+            <div className="flex items-center start gap-2 rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-3 py-2 text-xs text-green-800 dark:text-green-200">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>SMTP configured — use the Compose button in the Mail page to send emails.</span>
+            </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-muted-foreground"
+              onClick={() => {
+                setForm((f) => ({ ...f, email: config?.email || "", password: "" }));
+                setShowForm(true);
+              }}
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+              Change credentials
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <div className="space-y-6 max-w-3xl">
@@ -393,6 +596,7 @@ export default function SettingsPage() {
       </div>
 
       <ImapSection />
+      <SmtpSection />
     </div>
   );
 }

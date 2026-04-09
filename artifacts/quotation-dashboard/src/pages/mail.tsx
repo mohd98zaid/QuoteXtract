@@ -587,6 +587,107 @@ const FOLDER_EMPTY: Record<FolderName, { icon: React.ComponentType<{ className?:
   Trash: { icon: Trash2, title: "Trash is empty", desc: "Deleted emails will appear here." },
 };
 
+// ── Compose dialog ───────────────────────────────────────────────────────────
+function ComposeDialog({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
+  const { toast } = useToast();
+  const [to, setTo] = useState("");
+  const [cc, setCc] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const handleSend = async () => {
+    if (!to.trim() || !subject.trim() || !body.trim()) {
+      toast({ variant: "destructive", title: "Missing fields", description: "Please fill in To, Subject, and message body." });
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await fetch("/api/mail/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: to.trim(), cc: cc.trim() || undefined, subject: subject.trim(), text: body.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Send failed");
+      toast({ title: "Email sent!", description: `Message delivered to ${to}.` });
+      onSent();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send";
+      toast({ variant: "destructive", title: "Send failed", description: msg });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-end p-6 pointer-events-none">
+      <div className="w-[480px] bg-card border border-border rounded-xl shadow-2xl flex flex-col pointer-events-auto max-h-[600px]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 bg-[#1B1F3B] rounded-t-xl shrink-0">
+          <span className="text-sm font-semibold text-white">New Message</span>
+          <button type="button" onClick={onClose} className="text-white/60 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        {/* Fields */}
+        <div className="divide-y divide-border shrink-0">
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <span className="text-xs text-muted-foreground w-8 shrink-0">To</span>
+            <input
+              className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+              placeholder="recipient@example.com"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <span className="text-xs text-muted-foreground w-8 shrink-0">Cc</span>
+            <input
+              className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+              placeholder="optional"
+              value={cc}
+              onChange={(e) => setCc(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <span className="text-xs text-muted-foreground w-8 shrink-0">Subject</span>
+            <input
+              className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+              placeholder="Subject line"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+            />
+          </div>
+        </div>
+        {/* Body */}
+        <textarea
+          className="flex-1 resize-none px-4 py-3 text-sm bg-transparent outline-none min-h-[180px] text-foreground placeholder:text-muted-foreground"
+          placeholder="Write your message…"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+        />
+        {/* Footer */}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border shrink-0">
+          <Button
+            size="sm"
+            className="bg-violet-600 hover:bg-violet-700 text-white gap-2"
+            onClick={handleSend}
+            disabled={sending}
+          >
+            {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            {sending ? "Sending…" : "Send"}
+          </Button>
+          <button type="button" className="text-muted-foreground hover:text-destructive transition-colors" onClick={onClose}>
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function MailPage() {
   const [, setLocation] = useLocation();
@@ -834,63 +935,10 @@ export default function MailPage() {
 
       {/* ── Compose dialog ──────────────────── */}
       {composeOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-end p-6 pointer-events-none"
-        >
-          <div className="w-[480px] bg-card border border-border rounded-xl shadow-2xl flex flex-col pointer-events-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-[#1B1F3B] rounded-t-xl">
-              <span className="text-sm font-semibold text-white">New Message</span>
-              <button
-                type="button"
-                onClick={() => setComposeOpen(false)}
-                className="text-white/60 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {/* Fields */}
-            <div className="divide-y divide-border">
-              <div className="flex items-center gap-2 px-4 py-2.5">
-                <span className="text-xs text-muted-foreground w-8 shrink-0">To</span>
-                <Input className="border-0 h-7 text-sm focus-visible:ring-0 px-0" placeholder="Recipients" />
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2.5">
-                <span className="text-xs text-muted-foreground w-8 shrink-0">Cc</span>
-                <Input className="border-0 h-7 text-sm focus-visible:ring-0 px-0" placeholder="" />
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2.5">
-                <span className="text-xs text-muted-foreground w-8 shrink-0">Subject</span>
-                <Input className="border-0 h-7 text-sm focus-visible:ring-0 px-0" placeholder="" />
-              </div>
-            </div>
-            {/* Body */}
-            <textarea
-              className="flex-1 resize-none px-4 py-3 text-sm bg-transparent outline-none min-h-[200px] text-foreground placeholder:text-muted-foreground"
-              placeholder="Write your message…"
-            />
-            {/* Footer */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-              <Button
-                size="sm"
-                className="bg-violet-600 hover:bg-violet-700 text-white gap-2"
-                onClick={() => {
-                  toast({ title: "Send not available", description: "Outgoing mail (SMTP) is not configured yet." });
-                  setComposeOpen(false);
-                }}
-              >
-                <Send className="w-3.5 h-3.5" /> Send
-              </Button>
-              <button
-                type="button"
-                className="text-muted-foreground hover:text-destructive transition-colors"
-                onClick={() => setComposeOpen(false)}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <ComposeDialog
+          onClose={() => setComposeOpen(false)}
+          onSent={() => setComposeOpen(false)}
+        />
       )}
     </div>
   );

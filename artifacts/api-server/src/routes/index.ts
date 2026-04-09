@@ -7,6 +7,7 @@ import quotationsRouter from "./quotations";
 import analyticsRouter from "./analytics";
 import webhookRouter from "./webhook";
 import mailRouter from "./mail";
+import smtpRouter from "./smtp";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(quotationsRouter);
 router.use(analyticsRouter);
 router.use(webhookRouter);
 router.use(mailRouter);
+router.use(smtpRouter);
 
 export default router;
