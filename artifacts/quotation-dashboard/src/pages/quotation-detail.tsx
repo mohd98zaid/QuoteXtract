@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { format } from "date-fns";
 import {
-  CheckCircle, XCircle, Clock, FileText, Download, Edit2, Save, X, ArrowLeft, Trash2, Plus
+  CheckCircle, XCircle, Clock, FileText, Download, Edit2, Save, X, ArrowLeft, Trash2, Plus, Maximize2, ExternalLink
 } from "lucide-react";
 import {
   useGetQuotation,
@@ -63,6 +63,8 @@ export default function QuotationDetail() {
 
   const [showAddItem, setShowAddItem] = useState(false);
   const [newItemData, setNewItemData] = useState<any>(EMPTY_ITEM);
+
+  const [pdfFullScreen, setPdfFullScreen] = useState(false);
 
   useEffect(() => {
     if (quotation && !isEditing) {
@@ -378,27 +380,40 @@ export default function QuotationDetail() {
 
         <div className="space-y-6">
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-lg">Source Document</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="aspect-[1/1.4] bg-muted rounded-md border border-border flex items-center justify-center relative overflow-hidden mb-4">
-                <div className="text-center p-6 text-muted-foreground flex flex-col items-center">
-                  <FileText className="w-12 h-12 mb-3 opacity-50 text-primary" />
-                  <p className="font-medium">Original PDF</p>
-                  <p className="text-xs mt-1 max-w-[200px] truncate">{quotation.pdfStorageKey || 'Document'}</p>
-                </div>
-              </div>
-              {pdfDownloadUrl ? (
-                <a href={pdfDownloadUrl} download target="_blank" rel="noreferrer">
-                  <Button className="w-full" variant="outline">
-                    <Download className="w-4 h-4 mr-2" /> Download PDF
+              {pdfDownloadUrl && (
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Full screen" onClick={() => setPdfFullScreen(true)}>
+                    <Maximize2 className="w-4 h-4" />
                   </Button>
-                </a>
+                  <a href={pdfDownloadUrl} download target="_blank" rel="noreferrer">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Download">
+                      <Download className="w-4 h-4" />
+                    </Button>
+                  </a>
+                  <a href={pdfDownloadUrl} target="_blank" rel="noreferrer">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Open in new tab">
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
+                  </a>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent className="p-0">
+              {pdfDownloadUrl ? (
+                <iframe
+                  src={pdfDownloadUrl}
+                  className="w-full rounded-b-xl border-t border-border"
+                  style={{ height: "640px" }}
+                  title="PDF Preview"
+                />
               ) : (
-                <Button className="w-full" variant="outline" disabled>
-                  <Download className="w-4 h-4 mr-2" /> No PDF Available
-                </Button>
+                <div className="h-64 flex flex-col items-center justify-center text-muted-foreground gap-3 p-6">
+                  <FileText className="w-12 h-12 opacity-20 text-primary" />
+                  <p className="text-sm font-medium">No PDF available</p>
+                  <p className="text-xs opacity-60">This quotation was created manually without a source document.</p>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -484,6 +499,45 @@ export default function QuotationDetail() {
               {createItemMut.isPending ? "Adding..." : "Add Item"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Full-screen PDF viewer */}
+      <Dialog open={pdfFullScreen} onOpenChange={setPdfFullScreen}>
+        <DialogContent className="max-w-[95vw] w-[95vw] h-[95vh] flex flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="px-4 py-3 border-b shrink-0 flex-row items-center justify-between space-y-0">
+            <DialogTitle className="text-base font-semibold truncate">
+              {quotation.supplierName || "Quotation"} — {quotation.quotationNumber || "PDF"}
+            </DialogTitle>
+            <div className="flex items-center gap-1 shrink-0">
+              {pdfDownloadUrl && (
+                <>
+                  <a href={pdfDownloadUrl} target="_blank" rel="noreferrer">
+                    <Button variant="ghost" size="sm" className="gap-1.5">
+                      <ExternalLink className="w-3.5 h-3.5" /> New tab
+                    </Button>
+                  </a>
+                  <a href={pdfDownloadUrl} download>
+                    <Button variant="ghost" size="sm" className="gap-1.5">
+                      <Download className="w-3.5 h-3.5" /> Download
+                    </Button>
+                  </a>
+                </>
+              )}
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPdfFullScreen(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 min-h-0">
+            {pdfDownloadUrl && (
+              <iframe
+                src={pdfDownloadUrl}
+                className="w-full h-full"
+                title="PDF Full Screen"
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
