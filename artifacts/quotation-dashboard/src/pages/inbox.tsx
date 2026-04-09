@@ -509,26 +509,17 @@ export default function Inbox() {
                   <p className="text-sm text-muted-foreground max-w-sm">
                     AI will extract customer name, pricing, part numbers, and line items from each PDF.
                   </p>
-                  <div className="pt-4 flex items-center gap-3 justify-center">
+                  <div className="pt-4 flex items-center justify-center">
                     <Button
                       size="lg"
                       className="gap-2 px-8"
                       onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
                     >
                       <UploadCloud className="w-4 h-4" />
-                      Select PDF
-                    </Button>
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="gap-2 px-8"
-                      onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                    >
-                      <Files className="w-4 h-4" />
-                      Bulk Upload
+                      Select PDFs
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground/60 pt-1">Select multiple PDFs at once for batch processing</p>
+                  <p className="text-xs text-muted-foreground/60 pt-1">Select one or multiple PDFs at once for batch processing</p>
                 </div>
               )}
             </div>
