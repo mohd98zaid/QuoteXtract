@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
   Search, Filter, FileText, CheckCircle, Clock, XCircle,
-  MoreHorizontal, Trash2, ArrowRight, Loader2, Plus,
+  Trash2, ArrowRight, Loader2, Plus, ChevronDown,
 } from "lucide-react";
 import { useListQuotations, getListQuotationsQueryKey } from "@workspace/api-client-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -254,46 +254,58 @@ export default function QuotationsList() {
                       ) : '-'}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Select
-                        value={quotation.status}
-                        onValueChange={(val) => statusMut.mutate({ id: quotation.id, status: val })}
-                        disabled={updatingStatusId === quotation.id}
-                      >
-                        <SelectTrigger className={`h-7 w-[130px] text-xs border px-2 gap-1 rounded-full font-medium ${
-                          quotation.status === "approved" ? "bg-green-50 border-green-300 text-green-700 dark:bg-green-950 dark:border-green-700 dark:text-green-300" :
-                          quotation.status === "rejected" ? "bg-red-50 border-red-300 text-red-700 dark:bg-red-950 dark:border-red-700 dark:text-red-300" :
-                          quotation.status === "reviewed" ? "bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:border-blue-700 dark:text-blue-300" :
-                          "bg-muted border-border text-muted-foreground"
-                        }`}>
-                          {updatingStatusId === quotation.id ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <SelectValue />
-                          )}
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="draft">
-                            <span className="flex items-center gap-2">
-                              <Clock className="w-3.5 h-3.5 text-muted-foreground" /> Draft
-                            </span>
-                          </SelectItem>
-                          <SelectItem value="reviewed">
-                            <span className="flex items-center gap-2">
-                              <CheckCircle className="w-3.5 h-3.5 text-blue-500" /> Mark Reviewed
-                            </span>
-                          </SelectItem>
-                          <SelectItem value="rejected">
-                            <span className="flex items-center gap-2">
-                              <XCircle className="w-3.5 h-3.5 text-red-500" /> Reject
-                            </span>
-                          </SelectItem>
-                          <SelectItem value="approved">
-                            <span className="flex items-center gap-2">
-                              <CheckCircle className="w-3.5 h-3.5 text-green-500" /> Approve
-                            </span>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className={`flex items-center gap-1.5 h-7 px-2.5 text-xs border rounded-full font-medium transition-colors ${
+                              quotation.status === "approved" ? "bg-green-50 border-green-300 text-green-700 dark:bg-green-950 dark:border-green-700 dark:text-green-300" :
+                              quotation.status === "rejected" ? "bg-red-50 border-red-300 text-red-700 dark:bg-red-950 dark:border-red-700 dark:text-red-300" :
+                              quotation.status === "reviewed" ? "bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:border-blue-700 dark:text-blue-300" :
+                              "bg-muted border-border text-muted-foreground"
+                            }`}
+                            disabled={updatingStatusId === quotation.id}
+                          >
+                            {updatingStatusId === quotation.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : quotation.status === "approved" ? (
+                              <CheckCircle className="w-3 h-3" />
+                            ) : quotation.status === "rejected" ? (
+                              <XCircle className="w-3 h-3" />
+                            ) : quotation.status === "reviewed" ? (
+                              <CheckCircle className="w-3 h-3" />
+                            ) : (
+                              <Clock className="w-3 h-3" />
+                            )}
+                            <span className="capitalize">{quotation.status === "reviewed" ? "Reviewed" : quotation.status === "approved" ? "Approved" : quotation.status === "rejected" ? "Rejected" : "Draft"}</span>
+                            <ChevronDown className="w-3 h-3 opacity-60" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-44">
+                          <DropdownMenuItem onClick={() => statusMut.mutate({ id: quotation.id, status: "draft" })}>
+                            <Clock className="w-3.5 h-3.5 mr-2 text-muted-foreground" /> Draft
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => statusMut.mutate({ id: quotation.id, status: "reviewed" })}>
+                            <CheckCircle className="w-3.5 h-3.5 mr-2 text-blue-500" /> Mark Reviewed
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => statusMut.mutate({ id: quotation.id, status: "rejected" })}>
+                            <XCircle className="w-3.5 h-3.5 mr-2 text-red-500" /> Reject
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => statusMut.mutate({ id: quotation.id, status: "approved" })}>
+                            <CheckCircle className="w-3.5 h-3.5 mr-2 text-green-500" /> Approve
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => setDeleteTarget({
+                              id: quotation.id,
+                              name: quotation.supplierName || quotation.quotationNumber || `#${quotation.id}`,
+                            })}
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
@@ -305,31 +317,6 @@ export default function QuotationsList() {
                         >
                           View <ArrowRight className="w-3.5 h-3.5" />
                         </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground"
-                            >
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() =>
-                                setDeleteTarget({
-                                  id: quotation.id,
-                                  name: quotation.supplierName || quotation.quotationNumber || `#${quotation.id}`,
-                                })
-                              }
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
