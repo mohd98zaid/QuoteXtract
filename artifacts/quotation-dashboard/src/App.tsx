@@ -11,6 +11,7 @@ import MailPage from "@/pages/mail";
 import QuotationsList from "@/pages/quotations";
 import QuotationDetail from "@/pages/quotation-detail";
 import Search from "@/pages/search";
+import SettingsPage from "@/pages/settings";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,6 +32,7 @@ function Router() {
         <Route path="/quotations" component={QuotationsList} />
         <Route path="/quotations/:id" component={QuotationDetail} />
         <Route path="/search" component={Search} />
+        <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

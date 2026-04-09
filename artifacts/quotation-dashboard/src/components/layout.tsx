@@ -65,10 +65,16 @@ export function Layout({ children }: LayoutProps) {
         </nav>
 
         <div className="p-4 border-t border-border space-y-1">
-          <button className="flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium text-foreground hover:bg-muted transition-colors hover-elevate">
+          <Link
+            href="/settings"
+            className={cn(
+              "flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium transition-colors hover-elevate",
+              location === "/settings" ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted"
+            )}
+          >
             <Settings className="w-4 h-4" />
             Settings
-          </button>
+          </Link>
           <button className="flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors hover-elevate">
             <LogOut className="w-4 h-4" />
             Logout
