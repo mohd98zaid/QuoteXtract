@@ -341,6 +341,8 @@ export default function Inbox() {
     onSettled: () => setDeletingId(null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["quotations-paged"] });
+      queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
       toast({ title: "Document deleted", description: "The document and any linked quotation have been removed." });
     },
     onError: () => toast({ variant: "destructive", title: "Delete failed", description: "Could not delete the document." }),
@@ -359,6 +361,8 @@ export default function Inbox() {
     onSuccess: (data) => {
       setSelectedIds(new Set());
       queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["quotations-paged"] });
+      queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
       toast({ title: `${data.deleted} document${data.deleted === 1 ? "" : "s"} deleted`, description: "All linked quotations have also been removed." });
     },
     onError: () => toast({ variant: "destructive", title: "Bulk delete failed", description: "Could not delete the selected documents." }),

@@ -223,9 +223,10 @@ export default function QuotationDetail() {
     if (!confirm("Are you sure you want to delete this quotation entirely?")) return;
     try {
       await deleteQuotationMut.mutateAsync({ id: quotationId });
+      queryClient.invalidateQueries({ queryKey: ["quotations-paged"] });
       queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
       toast({ title: "Quotation deleted" });
-      setLocation("/inbox");
+      setLocation("/quotations");
     } catch {
       toast({ variant: "destructive", title: "Failed to delete quotation" });
     }
