@@ -87,6 +87,7 @@ type FolderName = "Inbox" | "Starred" | "Sent" | "Drafts" | "Spam" | "Trash";
 interface SidebarProps {
   unread: number;
   starredCount: number;
+  sentCount: number;
   activeFolder: FolderName;
   onFolderChange: (f: FolderName) => void;
   onCompose: () => void;
@@ -99,6 +100,7 @@ interface SidebarProps {
 function Sidebar({
   unread,
   starredCount,
+  sentCount,
   activeFolder,
   onFolderChange,
   onCompose,
@@ -110,7 +112,7 @@ function Sidebar({
   const folders: { icon: React.ComponentType<{ className?: string }>; label: FolderName; badge: number }[] = [
     { icon: Inbox, label: "Inbox", badge: unread },
     { icon: Star, label: "Starred", badge: starredCount },
-    { icon: Send, label: "Sent", badge: 0 },
+    { icon: Send, label: "Sent", badge: sentCount },
     { icon: FileEdit, label: "Drafts", badge: 0 },
     { icon: AlertOctagon, label: "Spam", badge: 0 },
     { icon: Trash2, label: "Trash", badge: 0 },
@@ -276,7 +278,9 @@ function EmailRow({ mail, selected, starred, onClick, onStar, onTrack, isTrackin
               isUnread ? "font-semibold text-foreground" : "font-medium text-muted-foreground",
             )}
           >
-            {mail.senderName || mail.senderEmail || "Unknown sender"}
+            {mail.source === "sent"
+              ? `To: ${mail.recipientEmail || "unknown"}`
+              : (mail.senderName || mail.senderEmail || "Unknown sender")}
           </span>
           <span className="text-[11px] text-muted-foreground ml-2 shrink-0">
             {formatDate(mail.receivedAt)}
@@ -377,6 +381,7 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [composeData, setComposeData] = useState<ComposeData | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: detail, isLoading } = useGetMail(mailId, {
     query: { enabled: mailId > 0 },
@@ -512,29 +517,48 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
             {detail.subject || "(no subject)"}
           </h2>
 
-          {/* Sender info card */}
+          {/* Sender / recipient info card */}
           <div className="flex items-start gap-3">
             <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0", avatarColor(detail.id))}>
               {senderAbbr(detail)}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-foreground">
-                  {detail.senderName || detail.senderEmail || "Unknown"}
-                </span>
-                {detail.senderName && detail.senderEmail && (
-                  <span className="text-xs text-muted-foreground">&lt;{detail.senderEmail}&gt;</span>
-                )}
-              </div>
+              {detail.source === "sent" ? (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-muted-foreground font-medium">From:</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {detail.senderName || detail.senderEmail || "Me"}
+                  </span>
+                  {detail.senderName && detail.senderEmail && (
+                    <span className="text-xs text-muted-foreground">&lt;{detail.senderEmail}&gt;</span>
+                  )}
+                  <span className="text-xs text-muted-foreground font-medium ml-2">To:</span>
+                  <span className="text-sm text-foreground">{(detail as any).recipientEmail || "—"}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold text-foreground">
+                    {detail.senderName || detail.senderEmail || "Unknown"}
+                  </span>
+                  {detail.senderName && detail.senderEmail && (
+                    <span className="text-xs text-muted-foreground">&lt;{detail.senderEmail}&gt;</span>
+                  )}
+                </div>
+              )}
               <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
                 <span>
                   {detail.receivedAt
                     ? format(new Date(detail.receivedAt), "EEEE, MMMM d, yyyy 'at' HH:mm")
                     : "—"}
                 </span>
-                {detail.isRead && (
+                {detail.isRead && detail.source !== "sent" && (
                   <span className="flex items-center gap-1 text-muted-foreground/60">
                     <CheckCircle2 className="w-3 h-3" /> Read
+                  </span>
+                )}
+                {detail.source === "sent" && (
+                  <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                    <CheckCircle2 className="w-3 h-3" /> Sent
                   </span>
                 )}
               </div>
@@ -631,7 +655,10 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
         <ComposeDialog
           {...composeData}
           onClose={() => setComposeData(null)}
-          onSent={() => setComposeData(null)}
+          onSent={() => {
+            setComposeData(null);
+            queryClient.invalidateQueries({ queryKey: getListMailQueryKey({ source: "sent" }) });
+          }}
         />
       )}
     </div>
@@ -642,7 +669,7 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
 const FOLDER_EMPTY: Record<FolderName, { icon: React.ComponentType<{ className?: string }>; title: string; desc: string }> = {
   Inbox: { icon: Inbox, title: "Inbox is empty", desc: "New emails will appear here automatically." },
   Starred: { icon: Star, title: "No starred emails", desc: "Star emails you want to find easily later." },
-  Sent: { icon: Send, title: "No sent emails", desc: "Sent emails from Hostinger will appear here." },
+  Sent: { icon: Send, title: "No sent emails", desc: "Emails you send will appear here." },
   Drafts: { icon: FileEdit, title: "No drafts", desc: "Drafts will appear here once created." },
   Spam: { icon: AlertOctagon, title: "No spam", desc: "Spam emails from Hostinger will appear here." },
   Trash: { icon: Trash2, title: "Trash is empty", desc: "Deleted emails will appear here." },
@@ -915,6 +942,11 @@ export default function MailPage() {
     query: { refetchInterval: 60_000 },
   });
 
+  const { data: sentMails, refetch: refetchSent } = useListMail({
+    params: { source: "sent" },
+    query: { refetchInterval: 60_000 },
+  });
+
   const fetchNowMut = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/mail/fetch", { method: "POST" });
@@ -1001,11 +1033,11 @@ export default function MailPage() {
     switch (activeFolder) {
       case "Inbox": return allMails;
       case "Starred": return allMails.filter((m) => starredIds.has(m.id));
-      case "Sent":
+      case "Sent": return sentMails || [];
       case "Drafts":
       case "Spam":
       case "Trash":
-        return []; // Only INBOX is synced via IMAP
+        return [];
     }
   })();
 
@@ -1016,6 +1048,7 @@ export default function MailPage() {
       m.subject?.toLowerCase().includes(q) ||
       m.senderName?.toLowerCase().includes(q) ||
       m.senderEmail?.toLowerCase().includes(q) ||
+      m.recipientEmail?.toLowerCase().includes(q) ||
       m.bodyText?.toLowerCase().includes(q)
     );
   });
@@ -1031,6 +1064,7 @@ export default function MailPage() {
         <Sidebar
           unread={unread}
           starredCount={starredCount}
+          sentCount={sentMails?.length ?? 0}
           activeFolder={activeFolder}
           onFolderChange={handleFolderChange}
           onCompose={() => setComposeOpen(true)}
@@ -1147,7 +1181,10 @@ export default function MailPage() {
       {composeOpen && (
         <ComposeDialog
           onClose={() => setComposeOpen(false)}
-          onSent={() => setComposeOpen(false)}
+          onSent={() => {
+            setComposeOpen(false);
+            queryClient.invalidateQueries({ queryKey: getListMailQueryKey({ source: "sent" }) });
+          }}
         />
       )}
     </div>

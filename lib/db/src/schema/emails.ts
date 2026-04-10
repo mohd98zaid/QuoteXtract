@@ -15,7 +15,8 @@ export const emailsTable = pgTable("emails", {
   bodyHtml: text("body_html"),
   isRead: boolean("is_read").notNull().default(false),
   messageId: text("message_id"),
-  source: text("source", { enum: ["upload", "imap", "webhook"] }).notNull().default("upload"),
+  source: text("source", { enum: ["upload", "imap", "webhook", "sent"] }).notNull().default("upload"),
+  recipientEmail: text("recipient_email"),
   status: text("status", { enum: ["pending", "processing", "extracted", "failed"] })
     .notNull()
     .default("pending"),

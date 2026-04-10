@@ -28,6 +28,7 @@ import type {
   HealthStatus,
   ImapConfigInput,
   ImapStatus,
+  ListMailParams,
   ListQuotationsParams,
   MailDetail,
   MailItem,
@@ -1496,35 +1497,37 @@ export function useGetQuotationsBySupplier<
 /**
  * @summary List all IMAP-fetched emails
  */
-export const getListMailUrl = () => {
-  return `/api/mail`;
+export const getListMailUrl = (params?: ListMailParams) => {
+  const qs = params?.source ? `?source=${params.source}` : "";
+  return `/api/mail${qs}`;
 };
 
-export const listMail = async (options?: RequestInit): Promise<MailItem[]> => {
-  return customFetch<MailItem[]>(getListMailUrl(), {
+export const listMail = async (params?: ListMailParams, options?: RequestInit): Promise<MailItem[]> => {
+  return customFetch<MailItem[]>(getListMailUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListMailQueryKey = () => {
-  return [`/api/mail`] as const;
+export const getListMailQueryKey = (params?: ListMailParams) => {
+  return [`/api/mail`, params] as const;
 };
 
 export const getListMailQueryOptions = <
   TData = Awaited<ReturnType<typeof listMail>>,
   TError = ErrorType<unknown>,
 >(options?: {
+  params?: ListMailParams;
   query?: UseQueryOptions<Awaited<ReturnType<typeof listMail>>, TError, TData>;
   request?: SecondParameter<typeof customFetch>;
 }) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const { query: queryOptions, request: requestOptions, params } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListMailQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListMailQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listMail>>> = ({
     signal,
-  }) => listMail({ signal, ...requestOptions });
+  }) => listMail(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listMail>>,
@@ -1539,13 +1542,14 @@ export type ListMailQueryResult = NonNullable<
 export type ListMailQueryError = ErrorType<unknown>;
 
 /**
- * @summary List all IMAP-fetched emails
+ * @summary List all emails by source (imap or sent)
  */
 
 export function useListMail<
   TData = Awaited<ReturnType<typeof listMail>>,
   TError = ErrorType<unknown>,
 >(options?: {
+  params?: ListMailParams;
   query?: UseQueryOptions<Awaited<ReturnType<typeof listMail>>, TError, TData>;
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {

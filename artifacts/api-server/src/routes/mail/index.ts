@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import { db, emailsTable, quotationsTable, quotationItemsTable } from "@workspace/db";
 import { extractFromPdf } from "../../lib/pdf-extractor";
 import { logger } from "../../lib/logger";
@@ -8,13 +8,15 @@ import { restartPoller, restorePdfFromImap, runScan } from "../../lib/imap-polle
 const router: IRouter = Router();
 
 // ── GET /api/mail ──────────────────────────────────────────────────────────
-// List all IMAP emails (source = 'imap'), sorted newest first
+// List emails by source. ?source=sent for sent, otherwise imap.
 router.get("/mail", async (req, res): Promise<void> => {
+  const source = req.query.source === "sent" ? "sent" : "imap";
   const emails = await db
     .select({
       id: emailsTable.id,
       senderName: emailsTable.senderName,
       senderEmail: emailsTable.senderEmail,
+      recipientEmail: emailsTable.recipientEmail,
       subject: emailsTable.subject,
       receivedAt: emailsTable.receivedAt,
       pdfFilename: emailsTable.pdfFilename,
@@ -26,7 +28,7 @@ router.get("/mail", async (req, res): Promise<void> => {
       createdAt: emailsTable.createdAt,
     })
     .from(emailsTable)
-    .where(eq(emailsTable.source, "imap"))
+    .where(eq(emailsTable.source, source))
     .orderBy(desc(emailsTable.createdAt));
 
   res.json(emails);
@@ -44,7 +46,7 @@ router.get("/mail/:id", async (req, res): Promise<void> => {
   const [email] = await db
     .select()
     .from(emailsTable)
-    .where(and(eq(emailsTable.id, id), eq(emailsTable.source, "imap")));
+    .where(and(eq(emailsTable.id, id), inArray(emailsTable.source, ["imap", "sent"])));
 
   if (!email) {
     res.status(404).json({ error: "Email not found" });
@@ -56,16 +58,20 @@ router.get("/mail/:id", async (req, res): Promise<void> => {
     await db.update(emailsTable).set({ isRead: true }).where(eq(emailsTable.id, id));
   }
 
-  // Check if quotation already tracked
-  const [existingQuotation] = await db
-    .select({ id: quotationsTable.id })
-    .from(quotationsTable)
-    .where(eq(quotationsTable.emailId, id));
+  // Check if quotation already tracked (only relevant for imap/upload)
+  let quotationId: number | null = null;
+  if (email.source !== "sent") {
+    const [existingQuotation] = await db
+      .select({ id: quotationsTable.id })
+      .from(quotationsTable)
+      .where(eq(quotationsTable.emailId, id));
+    quotationId = existingQuotation?.id ?? null;
+  }
 
   res.json({
     ...email,
     isRead: true,
-    quotationId: existingQuotation?.id ?? null,
+    quotationId,
   });
 });
 

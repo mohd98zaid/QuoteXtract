@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
 import { getSmtpConfig, saveSmtpConfig, sendMail, getAliases, addAlias, removeAlias } from "../../lib/smtp-mailer";
+import { db, emailsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 const memUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -57,13 +58,30 @@ router.post("/mail/send", memUpload.array("attachments"), async (req, res): Prom
     contentType: f.mimetype,
   }));
 
+  const smtpCfg = await getSmtpConfig();
+  const resolvedFromEmail = (fromEmail as string | undefined) || smtpCfg.email || "";
+  const resolvedFromName = (fromName as string | undefined) || smtpCfg.fromName || "Me";
+
   try {
     await sendMail({
       to, cc: cc || undefined, subject, text,
-      fromEmail: fromEmail || undefined,
-      fromName: fromName || undefined,
+      fromEmail: resolvedFromEmail || undefined,
+      fromName: resolvedFromName,
       attachments: attachments.length > 0 ? attachments : undefined,
     });
+
+    await db.insert(emailsTable).values({
+      senderName: resolvedFromName,
+      senderEmail: resolvedFromEmail,
+      recipientEmail: [to, ...(cc ? [cc] : [])].filter(Boolean).join(", "),
+      subject,
+      bodyText: text,
+      receivedAt: new Date().toISOString(),
+      source: "sent",
+      status: "extracted",
+      isRead: true,
+    } as any);
+
     res.json({ success: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to send email";

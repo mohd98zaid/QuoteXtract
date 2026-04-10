@@ -268,6 +268,8 @@ export interface MailItem {
   /** @nullable */
   senderEmail?: string | null;
   /** @nullable */
+  recipientEmail?: string | null;
+  /** @nullable */
   subject?: string | null;
   /** @nullable */
   receivedAt?: string | null;
@@ -281,6 +283,10 @@ export interface MailItem {
   /** @nullable */
   bodyText?: string | null;
   createdAt: string;
+}
+
+export interface ListMailParams {
+  source?: "imap" | "sent";
 }
 
 export type MailDetail = MailItem & {
