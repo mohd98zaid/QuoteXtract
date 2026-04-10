@@ -2,6 +2,9 @@ import { Router, type IRouter } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
+import { db, emailsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -33,23 +36,57 @@ const upload = multer({
   },
 });
 
+function hashFile(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    const stream = fs.createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+    stream.on("error", reject);
+  });
+}
+
 router.post(
   "/emails/upload-pdf",
   upload.single("file"),
   async (req, res): Promise<void> => {
     if (!req.file) {
-      res.status(400).json({ error: "No file uploaded" });
+      res.status(400).json({ error: "No file uploaded", code: "NO_FILE" });
+      return;
+    }
+
+    const filePath = req.file.path;
+    const sha256 = await hashFile(filePath);
+
+    const [existing] = await db
+      .select({ id: emailsTable.id, pdfFilename: emailsTable.pdfFilename, status: emailsTable.status, pdfStorageKey: emailsTable.pdfStorageKey })
+      .from(emailsTable)
+      .where(eq(emailsTable.pdfSha256, sha256));
+
+    if (existing) {
+      await fs.promises.unlink(filePath).catch(() => {});
+      res.status(409).json({
+        error: "Duplicate file",
+        code: "DUPLICATE_FILE",
+        duplicate: {
+          emailId: existing.id,
+          filename: existing.pdfFilename,
+          status: existing.status,
+          storageKey: existing.pdfStorageKey,
+        },
+      });
       return;
     }
 
     const storageKey = req.file.filename;
     const filename = req.file.originalname;
 
-    req.log.info({ storageKey, filename }, "PDF uploaded");
+    req.log.info({ storageKey, filename, sha256 }, "PDF uploaded");
 
     res.json({
       storageKey,
       filename,
+      sha256,
       url: `/api/pdfs/${storageKey}`,
     });
   },
@@ -60,7 +97,7 @@ router.get("/pdfs/:key", async (req, res): Promise<void> => {
   const filePath = path.join(uploadDir, raw);
 
   if (!fs.existsSync(filePath)) {
-    res.status(404).json({ error: "File not found" });
+    res.status(404).json({ error: "File not found", code: "PDF_NOT_FOUND" });
     return;
   }
 

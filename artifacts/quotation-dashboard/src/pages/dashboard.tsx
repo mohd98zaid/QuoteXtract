@@ -7,7 +7,7 @@ import {
   PieChart, Pie, Cell, Legend,
   AreaChart, Area,
   RadialBarChart, RadialBar,
-  CartesianGrid,
+  CartesianGrid, ReferenceLine,
 } from "recharts";
 import {
   FileText, Clock, CheckCircle, TrendingUp, Activity,
@@ -199,16 +199,27 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={monthlyTrend} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35} />
+                    <linearGradient id="gradApproved" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.5} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gradDraft" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
                       <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gradRejected" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
                   <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
                   <Tooltip {...tooltipStyle} />
-                  <Area type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={2.5} fill="url(#areaGrad)" dot={{ fill: "#6366f1", r: 4 }} activeDot={{ r: 6 }} />
+                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                  <Area type="monotone" dataKey="approved" name="Approved" stackId="1" stroke="#10b981" strokeWidth={2} fill="url(#gradApproved)" />
+                  <Area type="monotone" dataKey="draft" name="Draft" stackId="1" stroke="#6366f1" strokeWidth={2} fill="url(#gradDraft)" />
+                  <Area type="monotone" dataKey="rejected" name="Rejected" stackId="1" stroke="#ef4444" strokeWidth={2} fill="url(#gradRejected)" />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (

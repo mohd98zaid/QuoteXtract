@@ -3,10 +3,10 @@ import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
   Search, Filter, FileText, CheckCircle, Clock, XCircle,
-  Trash2, ArrowRight, Loader2, Plus, ChevronDown,
+  Trash2, ArrowRight, Loader2, Plus, ChevronDown, ChevronLeft, ChevronRight, AlertTriangle,
 } from "lucide-react";
-import { useListQuotations, getListQuotationsQueryKey } from "@workspace/api-client-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { getListQuotationsQueryKey } from "@workspace/api-client-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,30 +19,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useDebounce } from "@/hooks/use-debounce";
+
+const PAGE_SIZE = 20;
 
 const EMPTY_QUOTATION = {
   supplierName: "",
@@ -56,6 +44,14 @@ const EMPTY_QUOTATION = {
   notes: "",
 };
 
+interface PaginatedQuotations {
+  data: any[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export default function QuotationsList() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -63,6 +59,7 @@ export default function QuotationsList() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
 
   const [showNewDialog, setShowNewDialog] = useState(false);
@@ -92,10 +89,36 @@ export default function QuotationsList() {
 
   const debouncedSearch = useDebounce(searchTerm, 300);
 
-  const { data: quotations, isLoading } = useListQuotations({
-    search: debouncedSearch || undefined,
-    status: statusFilter !== "all" ? statusFilter : undefined,
+  const needsReview = statusFilter === "needs_review";
+  const apiStatus = !needsReview && statusFilter !== "all" ? statusFilter : undefined;
+
+  const { data: paginatedResult, isLoading } = useQuery<PaginatedQuotations>({
+    queryKey: ["quotations-paged", debouncedSearch, statusFilter, page],
+    queryFn: async () => {
+      const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+      if (debouncedSearch) params.set("search", debouncedSearch);
+      if (apiStatus) params.set("status", apiStatus);
+      if (needsReview) params.set("needs_review", "true");
+      const res = await fetch(`/api/quotations?${params}`);
+      return res.json();
+    },
+    staleTime: 15_000,
+    placeholderData: (prev) => prev,
   });
+
+  const quotations = paginatedResult?.data ?? [];
+  const totalPages = paginatedResult?.totalPages ?? 1;
+  const total = paginatedResult?.total ?? 0;
+
+  const handleFilterChange = (val: string) => {
+    setStatusFilter(val);
+    setPage(1);
+  };
+
+  const handleSearch = (val: string) => {
+    setSearchTerm(val);
+    setPage(1);
+  };
 
   const deleteMut = useMutation({
     mutationFn: async (id: number) => {
@@ -103,6 +126,7 @@ export default function QuotationsList() {
       if (!res.ok && res.status !== 204) throw new Error("Delete failed");
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quotations-paged"] });
       queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
       toast({ title: "Quotation deleted" });
       setDeleteTarget(null);
@@ -127,6 +151,7 @@ export default function QuotationsList() {
       return res.json();
     },
     onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ["quotations-paged"] });
       queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
       const label = status === "draft" ? "Draft" : status === "reviewed" ? "Reviewed" : status === "approved" ? "Approved" : "Rejected";
       toast({ title: `Status set to ${label}` });
@@ -164,13 +189,13 @@ export default function QuotationsList() {
             placeholder="Search customer, ref number..."
             className="pl-9 w-full"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => handleSearch(e.target.value)}
           />
         </div>
 
         <div className="flex gap-2 w-full sm:w-auto">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[140px]">
+          <Select value={statusFilter} onValueChange={handleFilterChange}>
+            <SelectTrigger className="w-[160px]">
               <Filter className="w-4 h-4 mr-2" />
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -180,6 +205,11 @@ export default function QuotationsList() {
               <SelectItem value="reviewed">Reviewed</SelectItem>
               <SelectItem value="approved">Approved</SelectItem>
               <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="needs_review">
+                <span className="flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-yellow-500" /> Needs Review
+                </span>
+              </SelectItem>
             </SelectContent>
           </Select>
 
@@ -188,6 +218,13 @@ export default function QuotationsList() {
           </Button>
         </div>
       </div>
+
+      {statusFilter === "needs_review" && (
+        <div className="flex items-center gap-2 rounded-md bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 px-3 py-2 text-sm text-yellow-800 dark:text-yellow-300">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          Showing draft quotations with AI confidence below 70% — these need manual review.
+        </div>
+      )}
 
       <Card className="flex-1 flex flex-col min-h-0">
         <CardContent className="flex-1 overflow-auto p-0">
@@ -216,7 +253,7 @@ export default function QuotationsList() {
                     <TableCell><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
                   </TableRow>
                 ))
-              ) : quotations && quotations.length > 0 ? (
+              ) : quotations.length > 0 ? (
                 quotations.map((quotation) => (
                   <TableRow
                     key={quotation.id}
@@ -230,7 +267,7 @@ export default function QuotationsList() {
                       {quotation.quotationNumber || '-'}
                     </TableCell>
                     <TableCell>
-                      {quotation.quotationDate ? format(new Date(quotation.quotationDate), 'MMM d, yyyy') : '-'}
+                      {quotation.quotationDate ? (() => { try { return format(new Date(quotation.quotationDate), 'MMM d, yyyy'); } catch { return quotation.quotationDate; } })() : '-'}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {quotation.totalAmount ? `${quotation.currency || ''} ${quotation.totalAmount}` : '-'}
@@ -250,6 +287,9 @@ export default function QuotationsList() {
                           <span className="text-xs text-muted-foreground">
                             {quotation.extractionScore}%
                           </span>
+                          {quotation.extractionScore < 70 && (
+                            <AlertTriangle className="w-3.5 h-3.5 text-yellow-500" />
+                          )}
                         </div>
                       ) : '-'}
                     </TableCell>
@@ -277,7 +317,7 @@ export default function QuotationsList() {
                             ) : (
                               <Clock className="w-3 h-3" />
                             )}
-                            <span className="capitalize">{quotation.status === "reviewed" ? "Reviewed" : quotation.status === "approved" ? "Approved" : quotation.status === "rejected" ? "Rejected" : "Draft"}</span>
+                            <span className="capitalize">{quotation.status}</span>
                             <ChevronDown className="w-3 h-3 opacity-60" />
                           </button>
                         </DropdownMenuTrigger>
@@ -335,6 +375,35 @@ export default function QuotationsList() {
             </TableBody>
           </Table>
         </CardContent>
+
+        {/* Pagination footer */}
+        {total > 0 && (
+          <div className="flex items-center justify-between border-t px-4 py-3 text-sm text-muted-foreground">
+            <span>
+              {total} total · page {page} of {totalPages}
+            </span>
+            <div className="flex gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* New Quotation dialog */}

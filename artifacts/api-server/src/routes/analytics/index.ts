@@ -105,6 +105,9 @@ router.get("/analytics/monthly-trend", async (req, res): Promise<void> => {
       TO_CHAR(DATE_TRUNC('month', ${quotationsTable.createdAt}), 'Mon YY') AS month,
       DATE_TRUNC('month', ${quotationsTable.createdAt}) AS month_date,
       COUNT(*)::int AS count,
+      COUNT(*) FILTER (WHERE ${quotationsTable.status} = 'approved')::int AS approved,
+      COUNT(*) FILTER (WHERE ${quotationsTable.status} = 'rejected')::int AS rejected,
+      COUNT(*) FILTER (WHERE ${quotationsTable.status} = 'draft')::int AS draft,
       COALESCE(SUM(CAST(NULLIF(${quotationsTable.totalAmount}, '') AS NUMERIC)), 0)::float AS total_value
     FROM ${quotationsTable}
     WHERE ${quotationsTable.createdAt} >= NOW() - INTERVAL '6 months'
@@ -113,9 +116,12 @@ router.get("/analytics/monthly-trend", async (req, res): Promise<void> => {
   `);
 
   res.json(
-    (rows.rows as Array<{ month: string; count: number; total_value: number }>).map((r) => ({
+    (rows.rows as Array<{ month: string; count: number; approved: number; rejected: number; draft: number; total_value: number }>).map((r) => ({
       month: r.month,
       count: Number(r.count),
+      approved: Number(r.approved),
+      rejected: Number(r.rejected),
+      draft: Number(r.draft),
       totalValue: Number(r.total_value),
     })),
   );

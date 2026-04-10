@@ -10,6 +10,7 @@ export const emailsTable = pgTable("emails", {
   receivedAt: text("received_at"),
   pdfFilename: text("pdf_filename"),
   pdfStorageKey: text("pdf_storage_key"),
+  pdfSha256: text("pdf_sha256"),
   bodyText: text("body_text"),
   bodyHtml: text("body_html"),
   isRead: boolean("is_read").notNull().default(false),

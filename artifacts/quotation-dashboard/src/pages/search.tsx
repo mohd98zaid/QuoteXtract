@@ -1,17 +1,29 @@
-import { useState } from "react";
-import { Link } from "wouter";
+import { useState, useEffect } from "react";
+import { Link, useLocation } from "wouter";
 import { Search as SearchIcon, FileText, Package, ArrowRight } from "lucide-react";
 import { useSearchQuotations } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Search() {
-  const [searchTerm, setSearchTerm] = useState("");
-  // In a real app we'd debounce this, or trigger search on enter/submit
-  const [activeSearch, setActiveSearch] = useState("");
+  const [location, setLocation] = useLocation();
+
+  const getQueryFromUrl = () => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("q") ?? "";
+  };
+
+  const [searchTerm, setSearchTerm] = useState(getQueryFromUrl);
+  const [activeSearch, setActiveSearch] = useState(getQueryFromUrl);
+
+  useEffect(() => {
+    const q = getQueryFromUrl();
+    setSearchTerm(q);
+    setActiveSearch(q);
+  }, [location]);
 
   const { data: searchResults, isLoading } = useSearchQuotations(
     { q: activeSearch },
@@ -20,8 +32,20 @@ export default function Search() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchTerm.trim().length > 2) {
-      setActiveSearch(searchTerm.trim());
+    const trimmed = searchTerm.trim();
+    if (trimmed.length > 2) {
+      setActiveSearch(trimmed);
+      const params = new URLSearchParams(window.location.search);
+      params.set("q", trimmed);
+      window.history.replaceState(null, "", `/search?${params.toString()}`);
+    }
+  };
+
+  const handleInputChange = (val: string) => {
+    setSearchTerm(val);
+    if (val.trim().length === 0) {
+      setActiveSearch("");
+      window.history.replaceState(null, "", "/search");
     }
   };
 
@@ -40,13 +64,20 @@ export default function Search() {
               placeholder="Enter part number, customer, or description..." 
               className="pl-12 h-14 text-lg rounded-xl shadow-sm border-2 focus-visible:ring-primary/20 focus-visible:border-primary"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleInputChange(e.target.value)}
+              autoFocus
             />
           </div>
           <Button type="submit" className="h-14 px-8 rounded-xl text-lg hover-elevate">
             Search
           </Button>
         </form>
+
+        {activeSearch && activeSearch.length > 2 && (
+          <p className="text-xs text-muted-foreground mt-3">
+            Tip: Bookmark this page — the URL includes your search query.
+          </p>
+        )}
       </div>
 
       {isLoading && (
@@ -73,7 +104,6 @@ export default function Search() {
             </div>
           ) : (
             <div className="space-y-8">
-              {/* Quotations Matches */}
               {searchResults.quotations && searchResults.quotations.length > 0 && (
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
@@ -90,7 +120,7 @@ export default function Search() {
                                 <Badge variant="outline" className="font-mono text-xs">{quotation.quotationNumber}</Badge>
                               </div>
                               <span className="text-muted-foreground text-sm">
-                                Amount: {quotation.currency} {quotation.totalAmount} • Status: {quotation.status}
+                                Amount: {quotation.currency} {quotation.totalAmount} · Status: <span className="capitalize">{quotation.status}</span>
                               </span>
                             </div>
                             <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground">
@@ -104,7 +134,6 @@ export default function Search() {
                 </div>
               )}
 
-              {/* Line Item Matches */}
               {searchResults.items && searchResults.items.length > 0 && (
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground uppercase tracking-wider">

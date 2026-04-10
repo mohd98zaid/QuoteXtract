@@ -408,7 +408,27 @@ export default function Inbox() {
     for (const item of newItems) {
       try {
         updateItem(item.id, { status: "uploading" });
-        const uploadRes = await uploadPdfMut.mutateAsync({ data: { file: item.file } });
+
+        const formData = new FormData();
+        formData.append("file", item.file);
+        const rawUpload = await fetch("/api/emails/upload-pdf", { method: "POST", body: formData });
+
+        if (rawUpload.status === 409) {
+          const body = await rawUpload.json();
+          const dup = body?.duplicate;
+          updateItem(item.id, { status: "failed", error: "Duplicate file" });
+          toast({
+            title: "Duplicate file skipped",
+            description: dup?.filename
+              ? `"${dup.filename}" was already uploaded (status: ${dup.status}).`
+              : "This PDF was already uploaded.",
+          });
+          failCount++;
+          continue;
+        }
+
+        if (!rawUpload.ok) throw new Error("Upload failed");
+        const uploadRes = await rawUpload.json() as { storageKey: string; filename: string; url: string };
 
         updateItem(item.id, { status: "extracting" });
         const emailRes = await createEmailMut.mutateAsync({
@@ -497,6 +517,13 @@ export default function Inbox() {
   }, [emails, sortField, sortDir]);
 
   const processedCount = emailsWithPdf.length;
+  const INBOX_PAGE_SIZE = 20;
+  const [inboxPage, setInboxPage] = useState(1);
+  const inboxTotalPages = Math.max(1, Math.ceil(emailsWithPdf.length / INBOX_PAGE_SIZE));
+  const pagedEmails = useMemo(
+    () => emailsWithPdf.slice((inboxPage - 1) * INBOX_PAGE_SIZE, inboxPage * INBOX_PAGE_SIZE),
+    [emailsWithPdf, inboxPage],
+  );
   const hasQueue = fileQueue.length > 0;
 
   return (
@@ -729,8 +756,8 @@ export default function Inbox() {
                         <Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
                       </TableCell>
                     </TableRow>
-                  ) : emailsWithPdf.length > 0 ? (
-                    emailsWithPdf.map((email) => {
+                  ) : pagedEmails.length > 0 ? (
+                    pagedEmails.map((email) => {
                       const quotationId = emailToQuotationId[email.id];
                       const isSelected = selectedIds.has(email.id);
                       const isDeleting = deletingId === email.id;
@@ -838,6 +865,19 @@ export default function Inbox() {
                 </TableBody>
               </Table>
             </div>
+            {emailsWithPdf.length > INBOX_PAGE_SIZE && (
+              <div className="flex items-center justify-between border-t px-4 py-2.5 text-sm text-muted-foreground shrink-0">
+                <span>{emailsWithPdf.length} total · page {inboxPage} of {inboxTotalPages}</span>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="icon" className="h-7 w-7" disabled={inboxPage <= 1} onClick={() => setInboxPage((p) => Math.max(1, p - 1))}>
+                    <ArrowUp className="w-3.5 h-3.5 rotate-[-90deg]" />
+                  </Button>
+                  <Button variant="outline" size="icon" className="h-7 w-7" disabled={inboxPage >= inboxTotalPages} onClick={() => setInboxPage((p) => Math.min(inboxTotalPages, p + 1))}>
+                    <ArrowDown className="w-3.5 h-3.5 rotate-[-90deg]" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </TabsContent>
       </Tabs>

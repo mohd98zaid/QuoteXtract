@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import {
-  CheckCircle, XCircle, Clock, FileText, Download, Edit2, Save, X, ArrowLeft, Trash2, Plus, Maximize2, ExternalLink, MoreHorizontal
+  CheckCircle, XCircle, Clock, FileText, Download, Edit2, Save, X, ArrowLeft, Trash2, Plus, Maximize2, ExternalLink, MoreHorizontal, RefreshCw, History, AlertTriangle
 } from "lucide-react";
 import {
   useGetQuotation,
@@ -13,7 +13,7 @@ import {
   getGetQuotationQueryKey,
   getListQuotationsQueryKey
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,9 @@ import { Label } from "@/components/ui/label";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const EMPTY_ITEM = {
   partNumber: "",
@@ -42,6 +45,25 @@ const EMPTY_ITEM = {
   notes: "",
 };
 
+interface QuotationEvent {
+  id: number;
+  quotationId: number;
+  eventType: string;
+  oldValue: string | null;
+  newValue: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+const EVENT_LABELS: Record<string, { label: string; color: string }> = {
+  created: { label: "Created", color: "text-indigo-500" },
+  status_changed: { label: "Status Changed", color: "text-blue-500" },
+  updated: { label: "Fields Updated", color: "text-yellow-500" },
+  re_extracted: { label: "Re-extracted", color: "text-purple-500" },
+  item_added: { label: "Item Added", color: "text-green-500" },
+  item_deleted: { label: "Item Removed", color: "text-red-500" },
+};
+
 export default function QuotationDetail() {
   const { id } = useParams();
   const [, setLocation] = useLocation();
@@ -53,10 +75,40 @@ export default function QuotationDetail() {
     query: { enabled: !!quotationId }
   });
 
+  const { data: events } = useQuery<QuotationEvent[]>({
+    queryKey: ["quotation-events", quotationId],
+    queryFn: async () => {
+      const res = await fetch(`/api/quotations/${quotationId}/events`);
+      return res.json();
+    },
+    enabled: !!quotationId,
+    staleTime: 10_000,
+  });
+
   const updateQuotationMut = useUpdateQuotation();
   const updateItemMut = useUpdateItem();
   const deleteItemMut = useDeleteItem();
   const createItemMut = useCreateItem();
+
+  const reExtractMut = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/quotations/${quotationId}/re-extract`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Re-extraction failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getGetQuotationQueryKey(quotationId) });
+      queryClient.invalidateQueries({ queryKey: ["quotation-events", quotationId] });
+      queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
+      toast({ title: "Re-extraction complete", description: "AI has re-read the PDF and updated all fields." });
+    },
+    onError: (err: Error) => {
+      toast({ variant: "destructive", title: "Re-extraction failed", description: err.message });
+    },
+  });
 
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<any>({});
@@ -68,6 +120,7 @@ export default function QuotationDetail() {
   const [newItemData, setNewItemData] = useState<any>(EMPTY_ITEM);
 
   const [pdfFullScreen, setPdfFullScreen] = useState(false);
+  const [showReExtractConfirm, setShowReExtractConfirm] = useState(false);
 
   useEffect(() => {
     if (quotation && !isEditing) {
@@ -90,6 +143,7 @@ export default function QuotationDetail() {
       queryClient.setQueryData(getGetQuotationQueryKey(quotationId), (old: any) =>
         old ? { ...old, ...formData } : old
       );
+      queryClient.invalidateQueries({ queryKey: ["quotation-events", quotationId] });
       setIsEditing(false);
       toast({ title: "Quotation updated" });
     } catch {
@@ -104,6 +158,7 @@ export default function QuotationDetail() {
         old ? { ...old, status: newStatus } : old
       );
       queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["quotation-events", quotationId] });
       toast({ title: `Status changed to ${newStatus}` });
     } catch {
       toast({ variant: "destructive", title: "Status update failed" });
@@ -142,6 +197,7 @@ export default function QuotationDetail() {
     try {
       await deleteItemMut.mutateAsync({ id: itemId });
       queryClient.invalidateQueries({ queryKey: getGetQuotationQueryKey(quotationId) });
+      queryClient.invalidateQueries({ queryKey: ["quotation-events", quotationId] });
       toast({ title: "Item deleted" });
     } catch {
       toast({ variant: "destructive", title: "Failed to delete item" });
@@ -152,6 +208,7 @@ export default function QuotationDetail() {
     try {
       await createItemMut.mutateAsync({ id: quotationId, data: newItemData });
       queryClient.invalidateQueries({ queryKey: getGetQuotationQueryKey(quotationId) });
+      queryClient.invalidateQueries({ queryKey: ["quotation-events", quotationId] });
       setShowAddItem(false);
       setNewItemData(EMPTY_ITEM);
       toast({ title: "Item added" });
@@ -174,7 +231,7 @@ export default function QuotationDetail() {
     switch (status) {
       case 'approved': return <Badge className="bg-green-500 hover:bg-green-600"><CheckCircle className="w-4 h-4 mr-1" /> Approved</Badge>;
       case 'rejected': return <Badge variant="destructive"><XCircle className="w-4 h-4 mr-1" /> Rejected</Badge>;
-      case 'reviewed': return <Badge variant="secondary" className="bg-blue-100 text-blue-800"><CheckCircle className="w-4 h-4 mr-1" /> Reviewed</Badge>;
+      case 'reviewed': return <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"><CheckCircle className="w-4 h-4 mr-1" /> Reviewed</Badge>;
       default: return <Badge variant="outline"><Clock className="w-4 h-4 mr-1" /> Draft</Badge>;
     }
   };
@@ -394,7 +451,8 @@ export default function QuotationDetail() {
           </Card>
         </div>
 
-        <div className="space-y-6">
+        {/* ── Sticky right column ─── */}
+        <div className="space-y-5 lg:sticky lg:top-4 lg:self-start">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-lg">Source Document</CardTitle>
@@ -421,12 +479,12 @@ export default function QuotationDetail() {
                 <iframe
                   src={pdfDownloadUrl}
                   className="w-full rounded-b-xl border-t border-border"
-                  style={{ height: "640px" }}
+                  style={{ height: "480px" }}
                   title="PDF Preview"
                 />
               ) : (
-                <div className="h-64 flex flex-col items-center justify-center text-muted-foreground gap-3 p-6">
-                  <FileText className="w-12 h-12 opacity-20 text-primary" />
+                <div className="h-48 flex flex-col items-center justify-center text-muted-foreground gap-3 p-6">
+                  <FileText className="w-10 h-10 opacity-20 text-primary" />
                   <p className="text-sm font-medium">No PDF available</p>
                   <p className="text-xs opacity-60">This quotation was created manually without a source document.</p>
                 </div>
@@ -435,10 +493,32 @@ export default function QuotationDetail() {
           </Card>
 
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">AI Extraction Data</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">AI Extraction</CardTitle>
+              {pdfDownloadUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs"
+                  disabled={reExtractMut.isPending}
+                  onClick={() => setShowReExtractConfirm(true)}
+                >
+                  {reExtractMut.isPending ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  )}
+                  {reExtractMut.isPending ? "Extracting…" : "Re-extract"}
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
+              {score < 70 && quotation.extractionScore != null && (
+                <div className="flex items-start gap-2 rounded-md bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 p-3 text-sm text-yellow-800 dark:text-yellow-300">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <p>Low confidence — some fields may be inaccurate. Review carefully or try re-extracting.</p>
+                </div>
+              )}
               <div>
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-muted-foreground">Confidence Score</span>
@@ -460,12 +540,54 @@ export default function QuotationDetail() {
                   <span className="text-muted-foreground">Source Email ID</span>
                   <span>#{quotation.emailId || '-'}</span>
                 </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-muted-foreground">Line Items</span>
+                  <span>{quotation.items?.length ?? 0}</span>
+                </div>
               </div>
             </CardContent>
           </Card>
+
+          {events && events.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <History className="w-4 h-4" /> Audit Trail
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="px-4 pb-4 space-y-0 max-h-72 overflow-y-auto">
+                  {events.map((event, i) => {
+                    const meta = EVENT_LABELS[event.eventType] ?? { label: event.eventType, color: "text-muted-foreground" };
+                    return (
+                      <div key={event.id} className="relative flex gap-3 py-2.5">
+                        {i < events.length - 1 && (
+                          <div className="absolute left-[7px] top-7 bottom-0 w-px bg-border" />
+                        )}
+                        <div className={`w-3.5 h-3.5 rounded-full border-2 border-background ring-2 ring-current mt-1 shrink-0 ${meta.color}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-xs font-semibold ${meta.color}`}>{meta.label}</div>
+                          {event.eventType === "status_changed" && event.oldValue && event.newValue && (
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              <span className="capitalize">{event.oldValue}</span> → <span className="capitalize font-medium">{event.newValue}</span>
+                            </div>
+                          )}
+                          {event.note && <div className="text-xs text-muted-foreground mt-0.5 truncate">{event.note}</div>}
+                          <div className="text-[10px] text-muted-foreground/60 mt-0.5">
+                            {formatDistanceToNow(new Date(event.createdAt), { addSuffix: true })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 
+      {/* Add Item Dialog */}
       <Dialog open={showAddItem} onOpenChange={setShowAddItem}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -486,76 +608,65 @@ export default function QuotationDetail() {
             </div>
             <div className="space-y-1">
               <Label>Quantity</Label>
-              <Input placeholder="e.g. 100" value={newItemData.quantity} onChange={e => setNewItemData({ ...newItemData, quantity: e.target.value })} />
+              <Input placeholder="e.g. 10" value={newItemData.quantity} onChange={e => setNewItemData({ ...newItemData, quantity: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label>MOQ</Label>
-              <Input placeholder="Min order qty" value={newItemData.moq} onChange={e => setNewItemData({ ...newItemData, moq: e.target.value })} />
+              <Input placeholder="e.g. 5" value={newItemData.moq} onChange={e => setNewItemData({ ...newItemData, moq: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label>Unit Price</Label>
-              <Input placeholder="e.g. 12.50" value={newItemData.unitPrice} onChange={e => setNewItemData({ ...newItemData, unitPrice: e.target.value })} />
+              <Input placeholder="e.g. 99.99" value={newItemData.unitPrice} onChange={e => setNewItemData({ ...newItemData, unitPrice: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label>Total Price</Label>
-              <Input placeholder="e.g. 1250.00" value={newItemData.totalPrice} onChange={e => setNewItemData({ ...newItemData, totalPrice: e.target.value })} />
+              <Input placeholder="e.g. 999.90" value={newItemData.totalPrice} onChange={e => setNewItemData({ ...newItemData, totalPrice: e.target.value })} />
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="space-y-1">
               <Label>Lead Time</Label>
-              <Input placeholder="e.g. 4 weeks" value={newItemData.leadTime} onChange={e => setNewItemData({ ...newItemData, leadTime: e.target.value })} />
-            </div>
-            <div className="col-span-2 space-y-1">
-              <Label>Notes</Label>
-              <Textarea placeholder="Any additional notes..." value={newItemData.notes} onChange={e => setNewItemData({ ...newItemData, notes: e.target.value })} rows={2} />
+              <Input placeholder="e.g. 2 weeks" value={newItemData.leadTime} onChange={e => setNewItemData({ ...newItemData, leadTime: e.target.value })} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowAddItem(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowAddItem(false)}>Cancel</Button>
             <Button onClick={handleAddItem} disabled={createItemMut.isPending}>
-              {createItemMut.isPending ? "Adding..." : "Add Item"}
+              {createItemMut.isPending ? "Adding…" : "Add Item"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Full-screen PDF viewer */}
+      {/* Full screen PDF dialog */}
       <Dialog open={pdfFullScreen} onOpenChange={setPdfFullScreen}>
-        <DialogContent className="max-w-[95vw] w-[95vw] h-[95vh] flex flex-col gap-0 p-0 overflow-hidden">
-          <DialogHeader className="px-4 py-3 border-b shrink-0 flex-row items-center justify-between space-y-0">
-            <DialogTitle className="text-base font-semibold truncate">
-              {quotation.supplierName || "Quotation"} — {quotation.quotationNumber || "PDF"}
-            </DialogTitle>
-            <div className="flex items-center gap-1 shrink-0">
-              {pdfDownloadUrl && (
-                <>
-                  <a href={pdfDownloadUrl} target="_blank" rel="noreferrer">
-                    <Button variant="ghost" size="sm" className="gap-1.5">
-                      <ExternalLink className="w-3.5 h-3.5" /> New tab
-                    </Button>
-                  </a>
-                  <a href={pdfDownloadUrl} download>
-                    <Button variant="ghost" size="sm" className="gap-1.5">
-                      <Download className="w-3.5 h-3.5" /> Download
-                    </Button>
-                  </a>
-                </>
-              )}
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPdfFullScreen(false)}>
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
+        <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogTitle>PDF Preview</DialogTitle>
           </DialogHeader>
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 px-4 pb-4">
             {pdfDownloadUrl && (
-              <iframe
-                src={pdfDownloadUrl}
-                className="w-full h-full"
-                title="PDF Full Screen"
-              />
+              <iframe src={pdfDownloadUrl} className="w-full h-full rounded border border-border" title="PDF Full Screen" />
             )}
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Re-extract confirmation */}
+      <AlertDialog open={showReExtractConfirm} onOpenChange={setShowReExtractConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Re-extract with AI?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will ask GPT-4o to re-read the PDF and overwrite all extracted fields and line items. Your manual edits will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setShowReExtractConfirm(false); reExtractMut.mutate(); }}>
+              Re-extract
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
