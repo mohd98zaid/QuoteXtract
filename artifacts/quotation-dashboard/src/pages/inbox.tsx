@@ -37,6 +37,7 @@ import {
 import type { Email } from "@workspace/api-client-react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -412,7 +413,6 @@ export default function Inbox() {
         const formData = new FormData();
         formData.append("file", item.file);
         const rawUpload = await fetch("/api/emails/upload-pdf", { method: "POST", body: formData });
-
         if (rawUpload.status === 409) {
           const body = await rawUpload.json();
           const dup = body?.duplicate;
@@ -420,13 +420,17 @@ export default function Inbox() {
           toast({
             title: "Duplicate file skipped",
             description: dup?.filename
-              ? `"${dup.filename}" was already uploaded (status: ${dup.status}).`
+              ? `"${dup.filename}" is a duplicate of an existing quotation.`
               : "This PDF was already uploaded.",
+            action: dup?.quotationId ? (
+              <ToastAction altText="View Quote" onClick={() => setLocation(`/quotations/${dup.quotationId}`)}>
+                View Quote
+              </ToastAction>
+            ) : undefined,
           });
           failCount++;
           continue;
         }
-
         if (!rawUpload.ok) throw new Error("Upload failed");
         const uploadRes = await rawUpload.json() as { storageKey: string; filename: string; url: string };
 

@@ -3,7 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { db, emailsTable } from "@workspace/db";
+import { db, emailsTable, quotationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -58,8 +58,33 @@ router.post(
     const filePath = req.file.path;
     const sha256 = await hashFile(filePath);
 
-    // Temporarily removed the strict duplicate checking so users can re-upload identical 
-    // files during testing. We still compute sha256 but won't block based on it.
+    const [existing] = await db
+      .select({ id: emailsTable.id, pdfFilename: emailsTable.pdfFilename, status: emailsTable.status, pdfStorageKey: emailsTable.pdfStorageKey })
+      .from(emailsTable)
+      .where(eq(emailsTable.pdfSha256, sha256));
+
+    if (existing) {
+      await fs.promises.unlink(filePath).catch(() => {});
+      
+      const [quote] = await db
+        .select({ id: quotationsTable.id })
+        .from(quotationsTable)
+        .where(eq(quotationsTable.emailId, existing.id))
+        .limit(1);
+
+      res.status(409).json({
+        error: "Duplicate file",
+        code: "DUPLICATE_FILE",
+        duplicate: {
+          emailId: existing.id,
+          filename: existing.pdfFilename,
+          status: existing.status,
+          storageKey: existing.pdfStorageKey,
+          quotationId: quote?.id
+        },
+      });
+      return;
+    }
 
     const storageKey = req.file.filename;
     const filename = req.file.originalname;
