@@ -1,7 +1,9 @@
 import { Router, type IRouter } from "express";
+import multer from "multer";
 import { getSmtpConfig, saveSmtpConfig, sendMail, getAliases, addAlias, removeAlias } from "../../lib/smtp-mailer";
 
 const router: IRouter = Router();
+const memUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 // GET /api/smtp/status
 router.get("/smtp/status", async (_req, res): Promise<void> => {
@@ -32,8 +34,8 @@ router.post("/smtp/configure", async (req, res): Promise<void> => {
   res.json(config);
 });
 
-// POST /api/mail/send
-router.post("/mail/send", async (req, res): Promise<void> => {
+// POST /api/mail/send  (accepts multipart/form-data OR application/json)
+router.post("/mail/send", memUpload.array("attachments"), async (req, res): Promise<void> => {
   const { to, cc, subject, text, fromEmail, fromName } = req.body ?? {};
   if (!to || typeof to !== "string") {
     res.status(400).json({ error: "Recipient (to) required" });
@@ -47,11 +49,20 @@ router.post("/mail/send", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Message body required" });
     return;
   }
+
+  const files = (req.files as Express.Multer.File[]) ?? [];
+  const attachments = files.map((f) => ({
+    filename: f.originalname,
+    content: f.buffer,
+    contentType: f.mimetype,
+  }));
+
   try {
     await sendMail({
       to, cc: cc || undefined, subject, text,
       fromEmail: fromEmail || undefined,
       fromName: fromName || undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
     });
     res.json({ success: true });
   } catch (err: unknown) {

@@ -101,6 +101,12 @@ export async function removeAlias(email: string): Promise<EmailAlias[]> {
   return updated;
 }
 
+export interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType: string;
+}
+
 export async function sendMail(opts: {
   to: string;
   cc?: string;
@@ -108,6 +114,7 @@ export async function sendMail(opts: {
   text: string;
   fromEmail?: string;
   fromName?: string;
+  attachments?: MailAttachment[];
 }): Promise<void> {
   const email = await getSetting("smtp_email");
   const password = await getSetting("smtp_password");
@@ -136,6 +143,11 @@ export async function sendMail(opts: {
     cc: opts.cc || undefined,
     subject: opts.subject,
     text: opts.text,
+    attachments: opts.attachments?.map((a) => ({
+      filename: a.filename,
+      content: a.content,
+      contentType: a.contentType,
+    })),
   });
 
   logger.info({ to: opts.to, from: resolvedFromEmail, subject: opts.subject }, "Email sent via SMTP");

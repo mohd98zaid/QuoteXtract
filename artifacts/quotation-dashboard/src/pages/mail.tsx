@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import {
@@ -676,6 +676,8 @@ function ComposeDialog({
   const [sending, setSending] = useState(false);
   const [fromDropdownOpen, setFromDropdownOpen] = useState(false);
   const [selectedFrom, setSelectedFrom] = useState<FromOption | null>(null);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: smtpStatus } = useQuery({
     queryKey: ["smtp-status"],
@@ -705,6 +707,24 @@ function ComposeDialog({
   const activeFrom = selectedFrom ?? fromOptions[0] ?? null;
   const hasMultipleFrom = fromOptions.length > 1;
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    const duplicates = files.filter((f) => attachments.some((a) => a.name === f.name && a.size === f.size));
+    const newFiles = files.filter((f) => !attachments.some((a) => a.name === f.name && a.size === f.size));
+    setAttachments((prev) => [...prev, ...newFiles]);
+    if (duplicates.length > 0) toast({ title: "Duplicate skipped", description: `${duplicates.map((d) => d.name).join(", ")} already attached.` });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeAttachment = (index: number) => setAttachments((prev) => prev.filter((_, i) => i !== index));
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const handleSend = async () => {
     if (!to.trim() || !subject.trim() || !body.trim()) {
       toast({ variant: "destructive", title: "Missing fields", description: "Please fill in To, Subject, and message body." });
@@ -712,18 +732,16 @@ function ComposeDialog({
     }
     setSending(true);
     try {
-      const res = await fetch("/api/mail/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: to.trim(),
-          cc: cc.trim() || undefined,
-          subject: subject.trim(),
-          text: body.trim(),
-          fromEmail: activeFrom?.email || undefined,
-          fromName: activeFrom?.name || undefined,
-        }),
-      });
+      const formData = new FormData();
+      formData.append("to", to.trim());
+      if (cc.trim()) formData.append("cc", cc.trim());
+      formData.append("subject", subject.trim());
+      formData.append("text", body.trim());
+      if (activeFrom?.email) formData.append("fromEmail", activeFrom.email);
+      if (activeFrom?.name) formData.append("fromName", activeFrom.name);
+      attachments.forEach((file) => formData.append("attachments", file));
+
+      const res = await fetch("/api/mail/send", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Send failed");
       toast({ title: "Email sent!", description: `Message delivered to ${to}.` });
@@ -812,22 +830,58 @@ function ComposeDialog({
         </div>
         {/* Body */}
         <textarea
-          className="flex-1 resize-none px-4 py-3 text-sm bg-transparent outline-none min-h-[180px] text-foreground placeholder:text-muted-foreground"
+          className="flex-1 resize-none px-4 py-3 text-sm bg-transparent outline-none min-h-[160px] text-foreground placeholder:text-muted-foreground"
           placeholder="Write your message…"
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
+
+        {/* Attachments list */}
+        {attachments.length > 0 && (
+          <div className="px-4 pb-2 flex flex-wrap gap-1.5 border-t border-border pt-2 shrink-0">
+            {attachments.map((file, i) => (
+              <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted border border-border text-xs max-w-[220px]">
+                <Paperclip className="w-3 h-3 text-muted-foreground shrink-0" />
+                <span className="truncate text-foreground font-medium">{file.name}</span>
+                <span className="text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
+                <button type="button" onClick={() => removeAttachment(i)} className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors shrink-0">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+
         {/* Footer */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-border shrink-0">
-          <Button
-            size="sm"
-            className="bg-violet-600 hover:bg-violet-700 text-white gap-2"
-            onClick={handleSend}
-            disabled={sending}
-          >
-            {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            {sending ? "Sending…" : "Send"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              className="bg-violet-600 hover:bg-violet-700 text-white gap-2"
+              onClick={handleSend}
+              disabled={sending}
+            >
+              {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              {sending ? "Sending…" : "Send"}
+            </Button>
+            <button
+              type="button"
+              title="Attach files"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+          </div>
           <button type="button" className="text-muted-foreground hover:text-destructive transition-colors" onClick={onClose}>
             <Trash2 className="w-4 h-4" />
           </button>
