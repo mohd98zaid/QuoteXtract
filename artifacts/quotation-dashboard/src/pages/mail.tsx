@@ -363,6 +363,10 @@ function EmailRow({ mail, selected, starred, onClick, onStar, onTrack, isTrackin
 }
 
 // ── Reading pane ──────────────────────────────────────────────────────────────
+interface ComposeData { title: string; initialTo: string; initialCc: string; initialSubject: string; initialBody: string; }
+
+const MAIL_LABELS = ["Important", "Follow-up", "Quotation", "Contract", "Spam"];
+
 interface ReadingPaneProps {
   mailId: number;
   onTrack: (id: number) => Promise<void>;
@@ -371,6 +375,8 @@ interface ReadingPaneProps {
 
 function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [composeData, setComposeData] = useState<ComposeData | null>(null);
 
   const { data: detail, isLoading } = useGetMail(mailId, {
     query: { enabled: mailId > 0 },
@@ -386,20 +392,55 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
 
   if (!detail) return null;
 
+  const quotedText = (prefix: string) => {
+    const dateStr = detail.receivedAt ? format(new Date(detail.receivedAt), "EEEE, MMMM d, yyyy 'at' HH:mm") : "";
+    const from = detail.senderName
+      ? `${detail.senderName}${detail.senderEmail ? ` <${detail.senderEmail}>` : ""}`
+      : (detail.senderEmail ?? "Unknown");
+    return `\n\n${prefix}\nFrom: ${from}\nDate: ${dateStr}\nSubject: ${detail.subject ?? ""}\n\n${detail.bodyText ?? ""}`;
+  };
+
+  const openReply = () => setComposeData({
+    title: "Reply",
+    initialTo: detail.senderEmail ?? "",
+    initialCc: "",
+    initialSubject: `Re: ${detail.subject ?? ""}`,
+    initialBody: quotedText("--- Original message ---"),
+  });
+
+  const openReplyAll = () => setComposeData({
+    title: "Reply All",
+    initialTo: detail.senderEmail ?? "",
+    initialCc: "",
+    initialSubject: `Re: ${detail.subject ?? ""}`,
+    initialBody: quotedText("--- Original message ---"),
+  });
+
+  const openForward = () => setComposeData({
+    title: "Forward",
+    initialTo: "",
+    initialCc: "",
+    initialSubject: `Fwd: ${detail.subject ?? ""}`,
+    initialBody: quotedText("--- Forwarded message ---"),
+  });
+
+  const handlePrint = () => window.print();
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header actions bar */}
       <div className="flex items-center justify-between px-5 py-2.5 border-b border-border shrink-0">
         <div className="flex items-center gap-1">
           {[
-            { icon: Reply, label: "Reply" },
-            { icon: ReplyAll, label: "Reply All" },
-            { icon: Forward, label: "Forward" },
-          ].map(({ icon: Icon, label }) => (
+            { icon: Reply, label: "Reply", action: openReply },
+            { icon: ReplyAll, label: "Reply All", action: openReplyAll },
+            { icon: Forward, label: "Forward", action: openForward },
+          ].map(({ icon: Icon, label, action }) => (
             <Tooltip key={label}>
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  onClick={action}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -410,17 +451,29 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
             </Tooltip>
           ))}
           <div className="w-px h-4 bg-border mx-1" />
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                    <Tag className="w-3.5 h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">Label</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="start">
+              {MAIL_LABELS.map((label) => (
+                <DropdownMenuItem key={label} onClick={() => toast({ title: `Labelled as "${label}"` })}>
+                  <Tag className="w-3.5 h-3.5 mr-2 text-violet-500" />
+                  {label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button type="button" className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                <Tag className="w-3.5 h-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Label</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+              <button type="button" onClick={handlePrint} className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                 <Printer className="w-3.5 h-3.5" />
               </button>
             </TooltipTrigger>
@@ -573,6 +626,14 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
           </div>
         </div>
       </div>
+
+      {composeData && (
+        <ComposeDialog
+          {...composeData}
+          onClose={() => setComposeData(null)}
+          onSent={() => setComposeData(null)}
+        />
+      )}
     </div>
   );
 }
@@ -588,12 +649,28 @@ const FOLDER_EMPTY: Record<FolderName, { icon: React.ComponentType<{ className?:
 };
 
 // ── Compose dialog ───────────────────────────────────────────────────────────
-function ComposeDialog({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
+interface ComposeDialogProps {
+  onClose: () => void;
+  onSent: () => void;
+  title?: string;
+  initialTo?: string;
+  initialCc?: string;
+  initialSubject?: string;
+  initialBody?: string;
+}
+function ComposeDialog({
+  onClose, onSent,
+  title = "New Message",
+  initialTo = "",
+  initialCc = "",
+  initialSubject = "",
+  initialBody = "",
+}: ComposeDialogProps) {
   const { toast } = useToast();
-  const [to, setTo] = useState("");
-  const [cc, setCc] = useState("");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [to, setTo] = useState(initialTo);
+  const [cc, setCc] = useState(initialCc);
+  const [subject, setSubject] = useState(initialSubject);
+  const [body, setBody] = useState(initialBody);
   const [sending, setSending] = useState(false);
 
   const handleSend = async () => {
@@ -625,7 +702,7 @@ function ComposeDialog({ onClose, onSent }: { onClose: () => void; onSent: () =>
       <div className="w-[480px] bg-card border border-border rounded-xl shadow-2xl flex flex-col pointer-events-auto max-h-[600px]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-[#1B1F3B] rounded-t-xl shrink-0">
-          <span className="text-sm font-semibold text-white">New Message</span>
+          <span className="text-sm font-semibold text-white">{title}</span>
           <button type="button" onClick={onClose} className="text-white/60 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
