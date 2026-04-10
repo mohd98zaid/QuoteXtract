@@ -30,7 +30,7 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/quotextract
       SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
       # Local LLM via llm-proxy container
-      LOCAL_AI_BASE_URL: http://llm-proxy:11434/engines/llama.cpp/v1
+      LOCAL_AI_BASE_URL: http://host.docker.internal:11434/engines/llama.cpp/v1
       LOCAL_AI_API_KEY: local
       LOCAL_AI_MODEL: hf.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF:q4_k_m
       # IMAP settings (optional — leave blank to disable email polling)
@@ -64,9 +64,7 @@ services:
       - "11434:11434"
     volumes:
       - ./docker/nginx-llm-proxy.conf:/etc/nginx/conf.d/default.conf:ro
-    networks:
-      - default
-      - host-bridge
+    network_mode: "bridge"
 
   dashboard:
     build:
@@ -80,9 +78,6 @@ services:
 
 networks:
   default:
-  host-bridge:
-    external: true
-    name: bridge
 
 volumes:
   postgres_data:

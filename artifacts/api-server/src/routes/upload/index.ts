@@ -58,25 +58,8 @@ router.post(
     const filePath = req.file.path;
     const sha256 = await hashFile(filePath);
 
-    const [existing] = await db
-      .select({ id: emailsTable.id, pdfFilename: emailsTable.pdfFilename, status: emailsTable.status, pdfStorageKey: emailsTable.pdfStorageKey })
-      .from(emailsTable)
-      .where(eq(emailsTable.pdfSha256, sha256));
-
-    if (existing) {
-      await fs.promises.unlink(filePath).catch(() => {});
-      res.status(409).json({
-        error: "Duplicate file",
-        code: "DUPLICATE_FILE",
-        duplicate: {
-          emailId: existing.id,
-          filename: existing.pdfFilename,
-          status: existing.status,
-          storageKey: existing.pdfStorageKey,
-        },
-      });
-      return;
-    }
+    // Temporarily removed the strict duplicate checking so users can re-upload identical 
+    // files during testing. We still compute sha256 but won't block based on it.
 
     const storageKey = req.file.filename;
     const filename = req.file.originalname;
