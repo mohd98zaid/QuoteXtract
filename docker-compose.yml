@@ -30,10 +30,10 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/quotextract
       SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
       # Local LLM via Docker Model Runner
-      # Run first: docker model run hf.co/blazeofchi/pdf-ocr-rl-qwen3vl2b-sft-only
-      AI_INTEGRATIONS_OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://model-runner.docker.internal/engines/llama.cpp/v1}
-      AI_INTEGRATIONS_OPENAI_API_KEY: ${OPENAI_API_KEY:-local}
-      OPENAI_MODEL: ${OPENAI_MODEL:-hf.co/blazeofchi/pdf-ocr-rl-qwen3vl2b-sft-only}
+      # Run first: docker model run hf.co/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M
+      AI_INTEGRATIONS_OPENAI_BASE_URL: http://model-runner.docker.internal/engines/llama.cpp/v1
+      AI_INTEGRATIONS_OPENAI_API_KEY: local
+      OPENAI_MODEL: hf.co/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M
       # IMAP settings (optional — leave blank to disable email polling)
       IMAP_HOST: ${IMAP_HOST:-imap.hostinger.com}
       IMAP_PORT: ${IMAP_PORT:-993}

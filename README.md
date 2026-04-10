@@ -61,7 +61,7 @@ run.bat
 ```bash
 cp .env.example .env
 # edit .env
-docker model run hf.co/blazeofchi/pdf-ocr-rl-qwen3vl2b-sft-only
+docker model run hf.co/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M
 docker compose up --build -d
 ```
 
@@ -108,11 +108,10 @@ Copy `.env.example` to `.env` and set your values. Key variables:
 |----------|-------------|
 | `POSTGRES_PASSWORD` | Database password |
 | `SESSION_SECRET` | Long random string for session security |
-| `OPENAI_BASE_URL` | AI endpoint (defaults to local Docker model runner) |
-| `OPENAI_API_KEY` | API key (`local` for local model, or your OpenAI key) |
-| `OPENAI_MODEL` | Model name to use for extraction |
 | `IMAP_EMAIL` | Email address to poll for incoming PDFs |
 | `IMAP_PASSWORD` | Email password |
+
+> The AI model (`hf.co/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M`) and its connection settings are pre-configured in `docker-compose.yml`. No additional AI environment variables are needed.
 
 ---
 

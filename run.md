@@ -31,10 +31,10 @@ Double-click **`run.bat`**. It will:
 ```bash
 # 1. Copy and configure environment
 cp .env.example .env
-# Edit .env — set POSTGRES_PASSWORD, SESSION_SECRET, and (optionally) email credentials
+# Edit .env — set POSTGRES_PASSWORD and SESSION_SECRET (email credentials are optional)
 
-# 2. Pull the local AI model (one-time, ~2 GB download)
-docker model run hf.co/blazeofchi/pdf-ocr-rl-qwen3vl2b-sft-only
+# 2. Pull the local AI model (one-time, ~500 MB download)
+docker model run hf.co/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M
 
 # 3. Build and start everything
 docker compose up --build -d
@@ -60,38 +60,17 @@ xdg-open http://localhost:3000   # Linux
 
 Copy `.env.example` to `.env` and set these values:
 
-| Variable | Default | Required | Description |
-|----------|---------|----------|-------------|
-| `POSTGRES_PASSWORD` | `postgres` | Recommended | Database password |
-| `SESSION_SECRET` | `change-me-...` | **Yes** | Random string for session signing |
-| `OPENAI_BASE_URL` | model-runner URL | No | Override to use OpenAI or Ollama |
-| `OPENAI_API_KEY` | `local` | No | API key (use `local` for local model) |
-| `OPENAI_MODEL` | pdf-ocr model | No | Model name to use for extraction |
-| `IMAP_EMAIL` | _(blank)_ | No | Hostinger email for inbox polling |
-| `IMAP_PASSWORD` | _(blank)_ | No | Email password |
-| `SMTP_HOST` | _(blank)_ | No | SMTP host for sending emails |
-| `SMTP_USER` | _(blank)_ | No | SMTP username |
-| `SMTP_PASSWORD` | _(blank)_ | No | SMTP password |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `POSTGRES_PASSWORD` | Recommended | Database password |
+| `SESSION_SECRET` | **Yes** | Random string for session signing |
+| `IMAP_EMAIL` | No | Hostinger email for inbox polling |
+| `IMAP_PASSWORD` | No | Email password |
+| `SMTP_HOST` | No | SMTP host for sending emails |
+| `SMTP_USER` | No | SMTP username |
+| `SMTP_PASSWORD` | No | SMTP password |
 
----
-
-## Using a Different AI Model
-
-To use **OpenAI** instead of the local model:
-
-```env
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_API_KEY=sk-...your-key...
-OPENAI_MODEL=gpt-4o
-```
-
-To use **Ollama** (running locally):
-
-```env
-OPENAI_BASE_URL=http://host.docker.internal:11434/v1
-OPENAI_API_KEY=ollama
-OPENAI_MODEL=llava
-```
+> The AI model, base URL, and API key are pre-configured in `docker-compose.yml` and do not need to be set in `.env`.
 
 ---
 
@@ -128,8 +107,8 @@ docker compose exec postgres psql -U postgres -d quotextract
 
 **AI extraction returns errors**
 - Confirm the model runner is active: `docker model list`
-- If the model is missing, re-run: `docker model run hf.co/blazeofchi/pdf-ocr-rl-qwen3vl2b-sft-only`
-- Alternatively, set `OPENAI_BASE_URL` and `OPENAI_API_KEY` to use OpenAI.
+- If the model is missing, re-run: `docker model run hf.co/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M`
+- Make sure Docker Model Runner is enabled in **Docker Desktop → Settings → Beta features**.
 
 **Port already in use**
 - Stop any conflicting service on port 3000 or 8080, or change the port mapping in `docker-compose.yml`:

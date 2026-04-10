@@ -53,9 +53,9 @@ if not exist ".env" (
 
 :: ── Pull / start the local AI model ──────────────────────────────
 echo  [STEP 1/3] Starting local AI model via Docker Model Runner...
-echo             (This may take a few minutes on first run — model is ~2 GB)
+echo             (This may take a few minutes on first run — model is ~500 MB)
 echo.
-docker model run hf.co/blazeofchi/pdf-ocr-rl-qwen3vl2b-sft-only
+docker model run hf.co/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M
 if %errorlevel% neq 0 (
     echo.
     echo  [WARN] Could not start the local AI model.
