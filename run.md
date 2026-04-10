@@ -33,8 +33,9 @@ Double-click **`run.bat`**. It will:
 cp .env.example .env
 # Edit .env — set POSTGRES_PASSWORD and SESSION_SECRET (email credentials are optional)
 
-# 2. Pull the local AI model (one-time, ~500 MB download)
-docker model run hf.co/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M
+# 2. Pull the local AI model (one-time download)
+docker model pull hf.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF:q4_k_m
+docker model run hf.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF:q4_k_m
 
 # 3. Build and start everything
 docker compose up --build -d
@@ -107,7 +108,7 @@ docker compose exec postgres psql -U postgres -d quotextract
 
 **AI extraction returns errors**
 - Confirm the model runner is active: `docker model list`
-- If the model is missing, re-run: `docker model run hf.co/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M`
+- If the model is missing, re-run: `docker model run hf.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF:q4_k_m`
 - Make sure Docker Model Runner is enabled in **Docker Desktop → Settings → Beta features**.
 
 **Port already in use**

@@ -32,24 +32,34 @@ echo  [OK] Docker is running.
 echo.
 
 :: ── Copy .env if it does not exist ───────────────────────────────
-@REM if not exist ".env" (
-@REM     if exist ".env.example" (
-@REM         echo  [INFO] No .env file found. Copying from .env.example...
-@REM         copy /Y ".env.example" ".env" >nul
-@REM         echo  [INFO] .env created. Edit it to set your credentials before continuing.
-@REM         echo.
-@REM         echo  Press any key to open .env in Notepad, then re-run this script.
-@REM         pause >nul
-@REM         notepad .env
-@REM         exit /b 0
-@REM     ) else (
-@REM         echo  [WARN] No .env or .env.example found. Using Docker Compose defaults.
-@REM         echo.
-@REM     )
-@REM ) else (
-@REM     echo  [OK] .env file found.
-@REM     echo.
-@REM )
+:: ── Setup Environment (.env) if missing ─────────────────────────
+if not exist ".env" (
+    if exist ".env.example" (
+        echo  [INFO] No .env file found. Creating first-time configuration...
+        copy /Y ".env.example" ".env" >nul
+        echo  [INFO] .env created from .env.example.
+        echo.
+        echo  = IMPORTANT ==========================================
+        echo  A .env file has been created. It is recommended to edit 
+        echo  it to set your own SESSION_SECRET and other credentials.
+        echo.
+        echo  Press any key to open .env for review, then CLOSE it 
+        echo  and return here to continue the launch.
+        echo  ======================================================
+        pause >nul
+        start notepad .env
+        echo.
+        echo  Waiting for you to return...
+        pause
+    ) else (
+        echo  [WARN] No .env or .env.example found. 
+        echo         Using Docker Compose internal defaults.
+        echo.
+    )
+) else (
+    echo  [OK] .env file found.
+)
+echo.
 
 :: ── Pull the local AI model (download only — does NOT open chat) ──
 echo  [STEP 1/3] Pulling local AI model via Docker Model Runner...

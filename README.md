@@ -111,7 +111,7 @@ Copy `.env.example` to `.env` and set your values. Key variables:
 | `IMAP_EMAIL` | Email address to poll for incoming PDFs |
 | `IMAP_PASSWORD` | Email password |
 
-> The AI model (`hf.co/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M`) and its connection settings are pre-configured in `docker-compose.yml`. No additional AI environment variables are needed.
+> The AI model (`hf.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF:q4_k_m`) and its connection settings are pre-configured in `docker-compose.yml`. No additional AI environment variables are needed.
 
 ---
 
