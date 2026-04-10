@@ -36,7 +36,7 @@ import {
   getGetMailQueryKey,
   type MailItem,
 } from "@workspace/api-client-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -658,6 +658,8 @@ interface ComposeDialogProps {
   initialSubject?: string;
   initialBody?: string;
 }
+interface FromOption { email: string; name: string; label: string; }
+
 function ComposeDialog({
   onClose, onSent,
   title = "New Message",
@@ -672,6 +674,36 @@ function ComposeDialog({
   const [subject, setSubject] = useState(initialSubject);
   const [body, setBody] = useState(initialBody);
   const [sending, setSending] = useState(false);
+  const [fromDropdownOpen, setFromDropdownOpen] = useState(false);
+  const [selectedFrom, setSelectedFrom] = useState<FromOption | null>(null);
+
+  const { data: smtpStatus } = useQuery({
+    queryKey: ["smtp-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/smtp/status");
+      return res.json() as Promise<{ email: string | null; fromName: string; configured: boolean }>;
+    },
+    staleTime: 60_000,
+  });
+
+  const { data: aliasesData } = useQuery({
+    queryKey: ["smtp-aliases"],
+    queryFn: async () => {
+      const res = await fetch("/api/smtp/aliases");
+      return res.json() as Promise<{ aliases: { email: string; name: string }[] }>;
+    },
+    staleTime: 30_000,
+  });
+
+  const fromOptions: FromOption[] = smtpStatus?.email
+    ? [
+        { email: smtpStatus.email, name: smtpStatus.fromName || "QuoteXtract", label: `${smtpStatus.fromName || "QuoteXtract"} <${smtpStatus.email}>` },
+        ...(aliasesData?.aliases ?? []).map((a) => ({ email: a.email, name: a.name, label: `${a.name} <${a.email}>` })),
+      ]
+    : [];
+
+  const activeFrom = selectedFrom ?? fromOptions[0] ?? null;
+  const hasMultipleFrom = fromOptions.length > 1;
 
   const handleSend = async () => {
     if (!to.trim() || !subject.trim() || !body.trim()) {
@@ -683,7 +715,14 @@ function ComposeDialog({
       const res = await fetch("/api/mail/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: to.trim(), cc: cc.trim() || undefined, subject: subject.trim(), text: body.trim() }),
+        body: JSON.stringify({
+          to: to.trim(),
+          cc: cc.trim() || undefined,
+          subject: subject.trim(),
+          text: body.trim(),
+          fromEmail: activeFrom?.email || undefined,
+          fromName: activeFrom?.name || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Send failed");
@@ -699,7 +738,7 @@ function ComposeDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-end p-6 pointer-events-none">
-      <div className="w-[480px] bg-card border border-border rounded-xl shadow-2xl flex flex-col pointer-events-auto max-h-[600px]">
+      <div className="w-[520px] bg-card border border-border rounded-xl shadow-2xl flex flex-col pointer-events-auto max-h-[640px]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-[#1B1F3B] rounded-t-xl shrink-0">
           <span className="text-sm font-semibold text-white">{title}</span>
@@ -709,8 +748,41 @@ function ComposeDialog({
         </div>
         {/* Fields */}
         <div className="divide-y divide-border shrink-0">
+          {/* From */}
+          {fromOptions.length > 0 && (
+            <div className="flex items-center gap-2 px-4 py-2.5">
+              <span className="text-xs text-muted-foreground w-12 shrink-0">From</span>
+              {hasMultipleFrom ? (
+                <DropdownMenu open={fromDropdownOpen} onOpenChange={setFromDropdownOpen}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex-1 flex items-center justify-between h-7 text-sm text-foreground bg-transparent hover:bg-muted/50 rounded px-1.5 transition-colors"
+                    >
+                      <span className="truncate">{activeFrom?.label ?? "Select sender…"}</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-1" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-[400px]">
+                    {fromOptions.map((opt) => (
+                      <DropdownMenuItem
+                        key={opt.email}
+                        onClick={() => { setSelectedFrom(opt); setFromDropdownOpen(false); }}
+                        className={cn(activeFrom?.email === opt.email && "bg-accent")}
+                      >
+                        <Send className="w-3.5 h-3.5 mr-2 text-violet-500 shrink-0" />
+                        <span className="truncate">{opt.label}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <span className="text-sm text-foreground truncate">{activeFrom?.label}</span>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-2 px-4 py-2.5">
-            <span className="text-xs text-muted-foreground w-8 shrink-0">To</span>
+            <span className="text-xs text-muted-foreground w-12 shrink-0">To</span>
             <input
               className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
               placeholder="recipient@example.com"
@@ -720,7 +792,7 @@ function ComposeDialog({
             />
           </div>
           <div className="flex items-center gap-2 px-4 py-2.5">
-            <span className="text-xs text-muted-foreground w-8 shrink-0">Cc</span>
+            <span className="text-xs text-muted-foreground w-12 shrink-0">Cc</span>
             <input
               className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
               placeholder="optional"
@@ -729,7 +801,7 @@ function ComposeDialog({
             />
           </div>
           <div className="flex items-center gap-2 px-4 py-2.5">
-            <span className="text-xs text-muted-foreground w-8 shrink-0">Subject</span>
+            <span className="text-xs text-muted-foreground w-12 shrink-0">Subject</span>
             <input
               className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
               placeholder="Subject line"

@@ -12,6 +12,11 @@ export interface SmtpConfig {
   configured: boolean;
 }
 
+export interface EmailAlias {
+  email: string;
+  name: string;
+}
+
 async function getSetting(key: string): Promise<string | null> {
   try {
     const [row] = await db.select().from(settingsTable).where(eq(settingsTable.key, key)).limit(1);
@@ -69,22 +74,54 @@ export async function saveSmtpConfig(opts: {
   logger.info({ email: opts.email }, "SMTP config saved");
 }
 
+export async function getAliases(): Promise<EmailAlias[]> {
+  try {
+    const raw = await getSetting("smtp_aliases");
+    if (!raw) return [];
+    return JSON.parse(raw) as EmailAlias[];
+  } catch {
+    return [];
+  }
+}
+
+export async function addAlias(alias: EmailAlias): Promise<EmailAlias[]> {
+  const existing = await getAliases();
+  if (existing.some((a) => a.email.toLowerCase() === alias.email.toLowerCase())) {
+    return existing;
+  }
+  const updated = [...existing, { email: alias.email.trim(), name: alias.name.trim() }];
+  await setSetting("smtp_aliases", JSON.stringify(updated));
+  return updated;
+}
+
+export async function removeAlias(email: string): Promise<EmailAlias[]> {
+  const existing = await getAliases();
+  const updated = existing.filter((a) => a.email.toLowerCase() !== email.toLowerCase());
+  await setSetting("smtp_aliases", JSON.stringify(updated));
+  return updated;
+}
+
 export async function sendMail(opts: {
   to: string;
   cc?: string;
   subject: string;
   text: string;
+  fromEmail?: string;
+  fromName?: string;
 }): Promise<void> {
   const email = await getSetting("smtp_email");
   const password = await getSetting("smtp_password");
   const host = (await getSetting("smtp_host")) || "smtp.hostinger.com";
   const port = Number((await getSetting("smtp_port")) || 465);
   const secure = (await getSetting("smtp_secure")) !== "false";
-  const fromName = (await getSetting("smtp_from_name")) || "QuoteXtract";
+  const defaultFromName = (await getSetting("smtp_from_name")) || "QuoteXtract";
 
   if (!email || !password) {
     throw new Error("SMTP not configured. Please add your credentials in Settings.");
   }
+
+  const resolvedFromEmail = opts.fromEmail || email;
+  const resolvedFromName = opts.fromName || defaultFromName;
 
   const transporter = nodemailer.createTransport({
     host,
@@ -94,12 +131,12 @@ export async function sendMail(opts: {
   });
 
   await transporter.sendMail({
-    from: `"${fromName}" <${email}>`,
+    from: `"${resolvedFromName}" <${resolvedFromEmail}>`,
     to: opts.to,
     cc: opts.cc || undefined,
     subject: opts.subject,
     text: opts.text,
   });
 
-  logger.info({ to: opts.to, subject: opts.subject }, "Email sent via SMTP");
+  logger.info({ to: opts.to, from: resolvedFromEmail, subject: opts.subject }, "Email sent via SMTP");
 }

@@ -19,17 +19,22 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Tag,
+  Plus,
+  Trash2,
+  AtSign,
 } from "lucide-react";
 import {
   useGetImapStatus,
   useConfigureImap,
 } from "@workspace/api-client-react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+
+interface EmailAlias { email: string; name: string; }
 
 function StatPill({
   icon,
@@ -98,11 +103,15 @@ function IconInput({
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fromName, setFromName] = useState("");
   const [showForm, setShowForm] = useState(false);
+
+  const [newAliasEmail, setNewAliasEmail] = useState("");
+  const [newAliasName, setNewAliasName] = useState("");
 
   const { data: imap, isLoading: imapLoading, refetch: refetchImap, isFetching: imapFetching } =
     useGetImapStatus({ query: { refetchInterval: 60_000 } });
@@ -136,6 +145,49 @@ export default function SettingsPage() {
       return res.json();
     },
   });
+
+  const { data: aliasesData, refetch: refetchAliases } = useQuery({
+    queryKey: ["smtp-aliases"],
+    queryFn: async () => {
+      const res = await fetch("/api/smtp/aliases");
+      return res.json() as Promise<{ aliases: EmailAlias[] }>;
+    },
+  });
+
+  const addAliasMut = useMutation({
+    mutationFn: async (alias: EmailAlias) => {
+      const res = await fetch("/api/smtp/aliases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(alias),
+      });
+      if (!res.ok) throw new Error("Failed to add alias");
+      return res.json();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["smtp-aliases"] }); },
+  });
+
+  const removeAliasMut = useMutation({
+    mutationFn: async (aliasEmail: string) => {
+      const res = await fetch(`/api/smtp/aliases/${encodeURIComponent(aliasEmail)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to remove alias");
+      return res.json();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["smtp-aliases"] }); },
+  });
+
+  const handleAddAlias = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAliasEmail.trim()) return;
+    try {
+      await addAliasMut.mutateAsync({ email: newAliasEmail.trim(), name: newAliasName.trim() || newAliasEmail.trim() });
+      toast({ title: "Alias added", description: `${newAliasEmail} added as a sender alias.` });
+      setNewAliasEmail("");
+      setNewAliasName("");
+    } catch {
+      toast({ variant: "destructive", title: "Failed", description: "Could not add alias." });
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,6 +381,106 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Sender Aliases card */}
+      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="h-1 w-full bg-gradient-to-r from-violet-500 to-blue-500" />
+
+        <div className="px-6 pt-5 pb-4 border-b border-border flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-muted flex items-center justify-center shrink-0">
+            <AtSign className="w-5 h-5 text-foreground" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-foreground">Sender Aliases</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Add alias email addresses to choose from when composing or replying to mail.
+            </p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* Existing aliases */}
+          {aliasesData?.aliases && aliasesData.aliases.length > 0 ? (
+            <div className="space-y-2">
+              {aliasesData.aliases.map((alias) => (
+                <div key={alias.email} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-muted/50 border border-border/60">
+                  <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                    <AtSign className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{alias.name}</p>
+                    <p className="text-xs text-muted-foreground font-mono truncate">{alias.email}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    disabled={removeAliasMut.isPending}
+                    onClick={async () => {
+                      try {
+                        await removeAliasMut.mutateAsync(alias.email);
+                        toast({ title: "Alias removed", description: `${alias.email} removed.` });
+                      } catch {
+                        toast({ variant: "destructive", title: "Failed to remove alias" });
+                      }
+                    }}
+                  >
+                    {removeAliasMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">No aliases yet. Add one below.</p>
+          )}
+
+          <Separator />
+
+          {/* Add alias form */}
+          <form onSubmit={handleAddAlias} className="space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Add new alias</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="alias-email" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  Alias email address
+                </Label>
+                <IconInput
+                  id="alias-email"
+                  icon={<AtSign className="w-3.5 h-3.5" />}
+                  type="email"
+                  placeholder="sales@plumsnpearls.com"
+                  value={newAliasEmail}
+                  onChange={setNewAliasEmail}
+                  required
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="alias-name" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  Display name
+                </Label>
+                <IconInput
+                  id="alias-name"
+                  icon={<User className="w-3.5 h-3.5" />}
+                  type="text"
+                  placeholder="Sales Team"
+                  value={newAliasName}
+                  onChange={setNewAliasName}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={addAliasMut.isPending || !newAliasEmail.trim()}
+              className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white border-0"
+            >
+              {addAliasMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              Add Alias
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );
