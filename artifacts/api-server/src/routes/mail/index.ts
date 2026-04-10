@@ -238,10 +238,15 @@ router.post("/mail/enhance", async (req, res): Promise<void> => {
 
     const MODEL = process.env.LOCAL_AI_MODEL ?? "gpt-4o";
 
-    const systemPrompt = `You are an expert business communication assistant. 
-Your job is to take a rough draft and rewrite it into a polite, professional corporate email.
-If an original email is provided, ensure your rewritten draft directly answers its contexts perfectly.
-CRITICAL: Only output the final email text. Do not include greetings like "Sure, here is the rewritten email:", "Okay", or quotation marks wrapping the whole response. Do not output subject lines unless absolutely needed.`;
+    const systemPrompt = `You are an expert business communication assistant.
+Your job is to take a rough draft and rewrite it into a polite, highly professional corporate email.
+You MUST output your response in exactly the following format:
+
+SUBJECT: <professional subject line here>
+BODY:
+<the professional email body here>
+
+Do not include any other text, greetings like "Here is your email:", or markdown code blocks. Always maintain a strictly professional tone.`;
 
     const userPrompt = `ORIGINAL EMAIL CONTEXT:
 ${originalText ? originalText : "None provided."}
@@ -259,9 +264,25 @@ Please refine my draft into a clean, professional email ready to send.`;
       ]
     });
 
-    const enhanced = response.choices[0]?.message?.content?.trim() || "Failed to generate reply.";
+    const output = response.choices[0]?.message?.content?.trim() || "";
+    
+    let subject = "";
+    let enhancedBody = output;
+    
+    const match = output.match(/SUBJECT:\s*(.*?)\n+BODY:\s*([\s\S]*)/i);
+    if (match) {
+      subject = match[1].trim();
+      enhancedBody = match[2].trim();
+    } else {
+      // Fallback if the AI fails the strict formatting
+      const lines = output.split('\n');
+      if (lines[0].toUpperCase().startsWith("SUBJECT:")) {
+        subject = lines[0].replace(/SUBJECT:/i, "").trim();
+        enhancedBody = lines.slice(1).join("\n").replace(/^BODY:/i, "").trim();
+      }
+    }
 
-    res.json({ enhanced });
+    res.json({ enhanced: enhancedBody, subject: subject });
   } catch (err: any) {
     req.log.error(err, "Mail enhance error");
     res.status(500).json({ error: "Failed to enhance email" });
