@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/integrations-openai-ai-server",
+  "name": "@workspace/integrations-local-ai-server",
   "version": "0.0.0",
   "private": true,
   "type": "module",

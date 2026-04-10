@@ -448,7 +448,7 @@ export default function SettingsPage() {
                   id="alias-email"
                   icon={<AtSign className="w-3.5 h-3.5" />}
                   type="email"
-                  placeholder="sales@plumsnpearls.com"
+                  placeholder="sales@yourdomain.com"
                   value={newAliasEmail}
                   onChange={setNewAliasEmail}
                   required

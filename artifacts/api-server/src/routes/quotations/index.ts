@@ -15,6 +15,11 @@ import {
   CreateItemBody,
 } from "@workspace/api-zod";
 import { extractFromPdf } from "../../lib/pdf-extractor";
+import multer from "multer";
+import { parse } from "csv-parse/sync";
+import { stringify } from "csv-stringify/sync";
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router: IRouter = Router();
 
@@ -145,6 +150,76 @@ router.get("/quotations", async (req, res): Promise<void> => {
   res.json(quotations);
 });
 
+// Export all top-level quotations to CSV — uses full path /quotations/export to avoid /:id conflict
+router.get("/quotations/export", async (req, res): Promise<void> => {
+  try {
+    const quotations = await db.select().from(quotationsTable).orderBy(desc(quotationsTable.createdAt));
+
+    const exportData = quotations.map(q => ({
+      id: q.id,
+      supplierName: q.supplierName || "",
+      supplierEmail: q.supplierEmail || "",
+      quotationNumber: q.quotationNumber || "",
+      quotationDate: q.quotationDate || "",
+      totalAmount: q.totalAmount || "",
+      currency: q.currency || "",
+      paymentTerms: q.paymentTerms || "",
+      deliveryTerms: q.deliveryTerms || "",
+      status: q.status || "draft",
+      notes: q.notes || ""
+    }));
+
+    const csvData = stringify(exportData, { header: true });
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", 'attachment; filename="quotations_backup.csv"');
+    res.send(csvData);
+  } catch (err) {
+    req.log.error({ err }, "Failed to export quotations to CSV");
+    res.status(500).json({ error: "Export failed" });
+  }
+});
+
+// Import top-level quotations from CSV — uses full path /quotations/import to avoid /:id conflict
+router.post("/quotations/import", upload.single("file"), async (req, res): Promise<void> => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: "No file uploaded" });
+      return;
+    }
+
+    const csvContent = req.file.buffer.toString("utf-8");
+    const records = parse(csvContent, { columns: true, skip_empty_lines: true, trim: true });
+
+    if (records.length === 0) {
+      res.status(400).json({ error: "CSV is empty or invalid" });
+      return;
+    }
+
+    const valuesToInsert = records.map((record: any) => ({
+      supplierName: record.supplierName || null,
+      supplierEmail: record.supplierEmail || null,
+      quotationNumber: record.quotationNumber || null,
+      quotationDate: record.quotationDate || null,
+      totalAmount: record.totalAmount || null,
+      currency: record.currency || null,
+      paymentTerms: record.paymentTerms || null,
+      deliveryTerms: record.deliveryTerms || null,
+      status: ["draft", "reviewed", "approved", "rejected"].includes(record.status) ? record.status : "draft",
+      notes: record.notes || null,
+    }));
+
+    if (valuesToInsert.length > 0) {
+      await db.insert(quotationsTable).values(valuesToInsert);
+    }
+
+    res.json({ success: true, importedCount: valuesToInsert.length });
+  } catch (err: any) {
+    req.log.error({ err }, "Failed to import quotations from CSV");
+    res.status(500).json({ error: err.message || "Import failed" });
+  }
+});
+
 // Get single quotation with items
 router.get("/quotations/:id", async (req, res): Promise<void> => {
   const params = GetQuotationParams.safeParse(req.params);
@@ -220,6 +295,12 @@ router.post("/quotations/:id/re-extract", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err, quotationId: id }, "Re-extraction failed");
     res.status(500).json({ error: "Re-extraction failed", code: "EXTRACTION_FAILED" });
+    return;
+  }
+
+  if (extracted.isQuotation === false) {
+    req.log.info({ quotationId: id }, "Re-extraction determined document is not a quotation");
+    res.status(400).json({ error: "Document does not appear to be a quotation", code: "NOT_A_QUOTATION" });
     return;
   }
 
@@ -468,5 +549,7 @@ router.get("/search", async (req, res): Promise<void> => {
     total: quotations.length + items.length,
   });
 });
+
+
 
 export default router;

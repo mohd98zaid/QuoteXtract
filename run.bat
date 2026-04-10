@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-title QuoteXtract — Docker Launcher
+title QuoteXtract - Docker Launcher
 
 echo.
 echo  ============================================================
@@ -32,38 +32,38 @@ echo  [OK] Docker is running.
 echo.
 
 :: ── Copy .env if it does not exist ───────────────────────────────
-if not exist ".env" (
-    if exist ".env.example" (
-        echo  [INFO] No .env file found. Copying from .env.example...
-        copy /Y ".env.example" ".env" >nul
-        echo  [INFO] .env created. Edit it to set your credentials before continuing.
-        echo.
-        echo  Press any key to open .env in Notepad, then re-run this script.
-        pause >nul
-        notepad .env
-        exit /b 0
-    ) else (
-        echo  [WARN] No .env or .env.example found. Using Docker Compose defaults.
-        echo.
-    )
-) else (
-    echo  [OK] .env file found.
-    echo.
-)
+@REM if not exist ".env" (
+@REM     if exist ".env.example" (
+@REM         echo  [INFO] No .env file found. Copying from .env.example...
+@REM         copy /Y ".env.example" ".env" >nul
+@REM         echo  [INFO] .env created. Edit it to set your credentials before continuing.
+@REM         echo.
+@REM         echo  Press any key to open .env in Notepad, then re-run this script.
+@REM         pause >nul
+@REM         notepad .env
+@REM         exit /b 0
+@REM     ) else (
+@REM         echo  [WARN] No .env or .env.example found. Using Docker Compose defaults.
+@REM         echo.
+@REM     )
+@REM ) else (
+@REM     echo  [OK] .env file found.
+@REM     echo.
+@REM )
 
-:: ── Pull / start the local AI model ──────────────────────────────
-echo  [STEP 1/3] Starting local AI model via Docker Model Runner...
-echo             (This may take a few minutes on first run — model is ~500 MB)
+:: ── Pull the local AI model (download only — does NOT open chat) ──
+echo  [STEP 1/3] Pulling local AI model via Docker Model Runner...
+echo             (This may take a few minutes on first run — model is ~1.1 GB)
 echo.
-docker model run hf.co/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M
+docker model pull hf.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF:q4_k_m
+@REM docker model pull hf.co/unsloth/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M 2>&1
 if %errorlevel% neq 0 (
     echo.
-    echo  [WARN] Could not start the local AI model.
+    echo  [WARN] Could not pull the local AI model.
     echo         Ensure Docker Desktop has the "AI / Model Runner" feature enabled.
     echo         Settings ^> Beta features ^> Enable Docker Model Runner
     echo.
-    echo  Continuing without local model — set OPENAI_BASE_URL in .env to use
-    echo  a different OpenAI-compatible API endpoint (e.g. OpenAI, Ollama).
+    echo  Continuing anyway — the model may already be cached locally.
     echo.
 )
 

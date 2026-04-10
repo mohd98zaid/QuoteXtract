@@ -15,7 +15,7 @@ COPY lib/ lib/
 COPY artifacts/quotation-dashboard/ artifacts/quotation-dashboard/
 
 # Install all workspace dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Build the frontend (production, no Replit plugins since REPL_ID is unset)
 WORKDIR /workspace/artifacts/quotation-dashboard

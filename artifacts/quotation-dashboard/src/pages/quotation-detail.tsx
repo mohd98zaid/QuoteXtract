@@ -7,6 +7,7 @@ import {
 import {
   useGetQuotation,
   useUpdateQuotation,
+  useDeleteQuotation,
   useUpdateItem,
   useDeleteItem,
   useCreateItem,
@@ -89,6 +90,7 @@ export default function QuotationDetail() {
   const updateItemMut = useUpdateItem();
   const deleteItemMut = useDeleteItem();
   const createItemMut = useCreateItem();
+  const deleteQuotationMut = useDeleteQuotation();
 
   const reExtractMut = useMutation({
     mutationFn: async () => {
@@ -217,6 +219,18 @@ export default function QuotationDetail() {
     }
   };
 
+  const handleDeleteQuotation = async () => {
+    if (!confirm("Are you sure you want to delete this quotation entirely?")) return;
+    try {
+      await deleteQuotationMut.mutateAsync({ id: quotationId });
+      queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
+      toast({ title: "Quotation deleted" });
+      setLocation("/inbox");
+    } catch {
+      toast({ variant: "destructive", title: "Failed to delete quotation" });
+    }
+  };
+
   const pdfDownloadUrl = quotation?.pdfStorageKey
     ? `/api/pdfs/${quotation.pdfStorageKey}`
     : null;
@@ -250,6 +264,17 @@ export default function QuotationDetail() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="text-destructive hover:bg-destructive/10" 
+            onClick={handleDeleteQuotation} 
+            disabled={deleteQuotationMut.isPending} 
+            title="Delete Quotation"
+          >
+            <Trash2 className="w-5 h-5" />
+          </Button>
+
           {getStatusBadge(quotation.status)}
 
           <Separator orientation="vertical" className="h-8 mx-2" />

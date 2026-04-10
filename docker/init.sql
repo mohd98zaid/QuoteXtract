@@ -2,22 +2,28 @@
 -- This runs automatically when postgres starts with an empty data volume.
 
 CREATE TABLE IF NOT EXISTS emails (
-    id          serial PRIMARY KEY,
-    sender_name text,
-    sender_email text,
-    subject     text,
-    received_at text,
-    pdf_filename text,
-    pdf_storage_key text,
-    body_text   text,
-    body_html   text,
-    is_read     boolean NOT NULL DEFAULT false,
-    message_id  text,
-    source      text NOT NULL DEFAULT 'upload',
-    status      text NOT NULL DEFAULT 'pending',
-    created_at  timestamptz NOT NULL DEFAULT now(),
-    updated_at  timestamptz NOT NULL DEFAULT now()
+    id               serial PRIMARY KEY,
+    sender_name      text,
+    sender_email     text,
+    subject          text,
+    received_at      text,
+    pdf_filename     text,
+    pdf_storage_key  text,
+    pdf_sha256       text,
+    body_text        text,
+    body_html        text,
+    is_read          boolean NOT NULL DEFAULT false,
+    message_id       text,
+    source           text NOT NULL DEFAULT 'upload',
+    recipient_email  text,
+    status           text NOT NULL DEFAULT 'pending',
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now()
 );
+
+-- Idempotent migrations for columns added after initial release
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS pdf_sha256      text;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS recipient_email text;
 
 CREATE TABLE IF NOT EXISTS quotations (
     id               serial PRIMARY KEY,
@@ -52,6 +58,16 @@ CREATE TABLE IF NOT EXISTS quotation_items (
     notes        text,
     created_at   timestamptz NOT NULL DEFAULT now(),
     updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS quotation_events (
+    id           serial PRIMARY KEY,
+    quotation_id integer NOT NULL,
+    event_type   text NOT NULL,
+    old_value    text,
+    new_value    text,
+    note         text,
+    created_at   timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS settings (

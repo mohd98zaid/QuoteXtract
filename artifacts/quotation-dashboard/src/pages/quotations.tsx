@@ -1,9 +1,10 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
   Search, Filter, FileText, CheckCircle, Clock, XCircle,
   Trash2, ArrowRight, Loader2, Plus, ChevronDown, ChevronLeft, ChevronRight, AlertTriangle,
+  Download, Upload,
 } from "lucide-react";
 import { getListQuotationsQueryKey } from "@workspace/api-client-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -61,6 +62,8 @@ export default function QuotationsList() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+
+  const importFileRef = React.useRef<HTMLInputElement>(null);
 
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newForm, setNewForm] = useState({ ...EMPTY_QUOTATION });
@@ -162,6 +165,30 @@ export default function QuotationsList() {
     onSettled: () => setUpdatingStatusId(null),
   });
 
+  const importMut = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/quotations/import", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["quotations-paged"] });
+      queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
+      toast({ title: "Import successful", description: `Imported ${data.importedCount} quotations.` });
+      if (importFileRef.current) importFileRef.current.value = "";
+    },
+    onError: (err: any) => {
+      toast({ variant: "destructive", title: "Import failed", description: err.message });
+      if (importFileRef.current) importFileRef.current.value = "";
+    },
+  });
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'approved':
@@ -213,9 +240,27 @@ export default function QuotationsList() {
             </SelectContent>
           </Select>
 
+          <Button variant="outline" onClick={() => window.open("/api/quotations/export", "_blank")} className="hidden sm:flex">
+            <Download className="w-4 h-4 mr-2" /> Export
+          </Button>
+          <Button variant="outline" onClick={() => importFileRef.current?.click()} className="hidden sm:flex" disabled={importMut.isPending}>
+            {importMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+            Import
+          </Button>
+
           <Button onClick={() => { setNewForm({ ...EMPTY_QUOTATION }); setShowNewDialog(true); }}>
             <Plus className="w-4 h-4 mr-2" /> New Quotation
           </Button>
+
+          <input
+            type="file"
+            accept=".csv"
+            className="hidden"
+            ref={importFileRef}
+            onChange={(e) => {
+              if (e.target.files?.[0]) importMut.mutate(e.target.files[0]);
+            }}
+          />
         </div>
       </div>
 

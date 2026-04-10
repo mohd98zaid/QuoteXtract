@@ -27,6 +27,7 @@ import {
   Tag,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import {
   useListMail,
@@ -704,6 +705,7 @@ function ComposeDialog({
   const [fromDropdownOpen, setFromDropdownOpen] = useState(false);
   const [selectedFrom, setSelectedFrom] = useState<FromOption | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [enhancing, setEnhancing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: smtpStatus } = useQuery({
@@ -778,6 +780,29 @@ function ComposeDialog({
       toast({ variant: "destructive", title: "Send failed", description: msg });
     } finally {
       setSending(false);
+    }
+  };
+  const handleEnhance = async () => {
+    if (!body.trim()) {
+      toast({ title: "Draft is empty", description: "Type a rough idea of what you want to say first!" });
+      return;
+    }
+    setEnhancing(true);
+    try {
+      const res = await fetch("/api/mail/enhance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draftText: body, originalText: initialBody }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to elevate draft");
+      setBody(data.enhanced);
+      toast({ title: "Draft enhanced ✨", description: "AI has rewritten your message." });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Enhancement failed";
+      toast({ variant: "destructive", title: "AI Error", description: msg });
+    } finally {
+      setEnhancing(false);
     }
   };
 
@@ -900,6 +925,22 @@ function ComposeDialog({
               {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
               {sending ? "Sending…" : "Send"}
             </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 border-violet-500/30 text-violet-600 hover:bg-violet-50 hover:text-violet-700 dark:text-violet-400 dark:border-violet-400/30 dark:hover:bg-violet-500/20 px-2"
+                  onClick={handleEnhance}
+                  disabled={enhancing || sending}
+                >
+                  {enhancing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  <span className="hidden sm:inline">{enhancing ? "✨ Writing..." : "✨ AI Enhance"}</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">Rewrite my draft politely</TooltipContent>
+            </Tooltip>
+            <div className="w-px h-5 bg-border mx-0.5" />
             <button
               type="button"
               title="Attach files"

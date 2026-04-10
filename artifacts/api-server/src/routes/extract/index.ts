@@ -36,6 +36,16 @@ router.post("/extract", async (req, res): Promise<void> => {
     return;
   }
 
+  if (extracted.isQuotation === false) {
+    req.log.info({ emailId, pdfStorageKey }, "Document is not a quotation");
+    await db
+      .update(emailsTable)
+      .set({ status: "failed" })
+      .where(eq(emailsTable.id, emailId));
+    res.status(400).json({ error: "Document is not a recognizable quotation" });
+    return;
+  }
+
   const [quotation] = await db
     .insert(quotationsTable)
     .values({

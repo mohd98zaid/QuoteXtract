@@ -6,9 +6,21 @@ import { randomUUID } from "crypto";
 import { tmpdir } from "os";
 import { join } from "path";
 
+if (!process.env.LOCAL_AI_BASE_URL) {
+  throw new Error(
+    "LOCAL_AI_BASE_URL must be set. Did you forget to provision the local AI integration?",
+  );
+}
+
+if (!process.env.LOCAL_AI_API_KEY) {
+  throw new Error(
+    "LOCAL_AI_API_KEY must be set. Did you forget to provision the local AI integration?",
+  );
+}
+
 export const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.LOCAL_AI_API_KEY,
+  baseURL: process.env.LOCAL_AI_BASE_URL,
 });
 
 export type AudioFormat = "wav" | "mp3" | "webm" | "mp4" | "ogg" | "unknown";

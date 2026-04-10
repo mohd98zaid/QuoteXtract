@@ -24,7 +24,7 @@ COPY lib/ lib/
 COPY artifacts/api-server/ artifacts/api-server/
 
 # Install all workspace dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Build the API server (esbuild bundles everything into dist/)
 WORKDIR /workspace/artifacts/api-server
@@ -53,7 +53,7 @@ COPY --from=builder /workspace/pnpm-lock.yaml /workspace/pnpm-lock.yaml
 COPY --from=builder /workspace/lib /workspace/lib
 
 WORKDIR /workspace
-RUN pnpm install --frozen-lockfile --prod
+RUN pnpm install --no-frozen-lockfile --prod
 
 WORKDIR /workspace/artifacts/api-server
 

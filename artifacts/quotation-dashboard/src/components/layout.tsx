@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/use-theme";
+import { ChatAssistant } from "./ChatAssistant";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -213,6 +214,7 @@ export function Layout({ children }: LayoutProps) {
           </div>
         )}
       </main>
+      <ChatAssistant />
     </div>
   );
 }
