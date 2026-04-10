@@ -4,7 +4,7 @@ title QuoteXtract - Docker Launcher
 
 echo.
 echo  ============================================================
-echo   QuoteXtract — Local Docker Setup
+echo   QuoteXtract - Local Docker Setup
 echo  ============================================================
 echo.
 
