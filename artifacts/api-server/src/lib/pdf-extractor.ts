@@ -54,7 +54,13 @@ export async function extractFromPdf(storageKey: string): Promise<ExtractedQuota
   }
 
   const pdfText = await extractTextFromPdf(filePath);
-
+  
+  if (!pdfText) {
+    console.warn(`[PDF Extractor] No text extracted from ${storageKey}. The file might be a scanned image or empty.`);
+  } else {
+    console.log(`[PDF Extractor] Extracted ${pdfText.length} characters from ${storageKey}. First 100 chars: "${pdfText.substring(0, 100).replace(/\n/g, ' ')}..."`);
+  }
+  
   // Truncate PDF text so a small local model won't OOM or loop
   const truncatedText = pdfText.slice(0, 3000) || "(No text extracted — may be scanned image. Use extractionScore: 0.)";
 
