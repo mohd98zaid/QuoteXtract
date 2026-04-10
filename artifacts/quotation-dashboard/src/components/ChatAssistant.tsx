@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Bot, X, Send, User, ChevronDown, Minimize2 } from "lucide-react";
+import { Bot, Send, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +16,7 @@ export function ChatAssistant() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Hello! I am your AI Assistant. You can ask me to search for quotations, read details by supplier name, or read items in a quotation.",
+      content: "👋 Hi! I'm **QuoteXtract Assistant** — your all-in-one AI.\n\nI can help you with:\n• 🔍 Searching quotations by supplier name or number\n• 📋 Getting quotation line items & totals\n• 📖 Explaining how QuoteXtract works\n• 💬 Answering **any other question** you have\n\nJust ask me anything!",
     },
   ]);
   const [input, setInput] = useState("");
@@ -137,13 +139,45 @@ export function ChatAssistant() {
                 >
                   <div
                     className={cn(
-                      "px-4 py-2.5 rounded-2xl",
+                      "px-4 py-2.5 rounded-2xl text-sm",
                       msg.role === "user"
                         ? "bg-primary text-primary-foreground rounded-tr-sm"
-                        : "bg-muted text-foreground border border-border/50 rounded-tl-sm whitespace-pre-wrap"
+                        : "bg-muted text-foreground border border-border/50 rounded-tl-sm prose prose-sm prose-invert max-w-none dark:prose-invert"
                     )}
                   >
-                    {msg.content}
+                    {msg.role === "assistant" ? (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          table: ({ node, ...props }) => (
+                            <div className="overflow-x-auto my-1">
+                              <table className="text-xs border-collapse w-full" {...props} />
+                            </div>
+                          ),
+                          th: ({ node, ...props }) => (
+                            <th className="border border-border/60 px-2 py-1 bg-muted/60 font-semibold text-left" {...props} />
+                          ),
+                          td: ({ node, ...props }) => (
+                            <td className="border border-border/60 px-2 py-1" {...props} />
+                          ),
+                          code: ({ node, inline, ...props }: any) =>
+                            inline ? (
+                              <code className="bg-black/20 px-1 rounded text-xs font-mono" {...props} />
+                            ) : (
+                              <pre className="bg-black/20 p-2 rounded text-xs font-mono overflow-x-auto">
+                                <code {...props} />
+                              </pre>
+                            ),
+                          a: ({ node, ...props }) => (
+                            <a className="underline text-primary" target="_blank" rel="noreferrer" {...props} />
+                          ),
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    ) : (
+                      msg.content
+                    )}
                   </div>
                 </div>
               ))}
@@ -170,7 +204,7 @@ export function ChatAssistant() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask about a quotation..."
+                  placeholder="Ask me anything..."
                   className="flex-1 bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted-foreground"
                   disabled={isLoading}
                 />
