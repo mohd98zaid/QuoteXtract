@@ -662,6 +662,12 @@ components:
           type: ["string", "null"]
         quotationDate:
           type: ["string", "null"]
+        clientAddress:
+          type: ["string", "null"]
+        clientContact:
+          type: ["string", "null"]
+        clientVat:
+          type: ["string", "null"]
         currency:
           type: ["string", "null"]
         paymentTerms:
@@ -711,6 +717,12 @@ components:
         quotationNumber:
           type: ["string", "null"]
         quotationDate:
+          type: ["string", "null"]
+        clientAddress:
+          type: ["string", "null"]
+        clientContact:
+          type: ["string", "null"]
+        clientVat:
           type: ["string", "null"]
         currency:
           type: ["string", "null"]

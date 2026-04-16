@@ -4,7 +4,7 @@ export const quotationEventsTable = pgTable("quotation_events", {
   id: serial("id").primaryKey(),
   quotationId: integer("quotation_id").notNull(),
   eventType: text("event_type", {
-    enum: ["created", "status_changed", "updated", "re_extracted", "item_added", "item_deleted"],
+    enum: ["created", "status_changed", "updated", "re_extracted", "item_added", "item_deleted"] as const,
   }).notNull(),
   oldValue: text("old_value"),
   newValue: text("new_value"),

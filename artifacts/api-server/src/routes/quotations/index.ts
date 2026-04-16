@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, lt, and, desc } from "drizzle-orm";
+import { eq, ilike, or, lt, and, desc, count, sql } from "drizzle-orm";
 import { db, quotationsTable, quotationItemsTable, quotationEventsTable, emailsTable } from "@workspace/db";
 import {
   GetQuotationParams,
@@ -44,26 +44,31 @@ router.post("/quotations", async (req, res): Promise<void> => {
     paymentTerms = null,
     deliveryTerms = null,
     totalAmount = null,
+    direction = "inbound",
     notes = null,
   } = req.body || {};
 
+  const insertValues = {
+    supplierName,
+    supplierEmail,
+    quotationNumber,
+    quotationDate,
+    currency,
+    paymentTerms,
+    deliveryTerms,
+    totalAmount,
+    direction: (direction as "inbound" | "outbound"),
+    notes,
+    status: "draft" as const,
+    pdfStorageKey: null,
+    emailId: null,
+    extractionScore: null,
+  };
+
   const [quotation] = await db
     .insert(quotationsTable)
-    .values({
-      supplierName,
-      supplierEmail,
-      quotationNumber,
-      quotationDate,
-      currency,
-      paymentTerms,
-      deliveryTerms,
-      totalAmount,
-      notes,
-      status: "draft",
-      pdfStorageKey: null,
-      emailId: null,
-      extractionScore: null,
-    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .values(insertValues as any)
     .returning();
 
   await logEvent(quotation.id, "created", null, "draft", `Manual creation: ${supplierName ?? "unnamed"}`);
@@ -122,10 +127,11 @@ router.get("/quotations", async (req, res): Promise<void> => {
   if (pageParam !== null) {
     const offset = (pageParam - 1) * limit;
 
-    const [{ total }] = await db
-      .select({ total: db.$count(quotationsTable) })
+    const countResult = await db
+      .select({ total: sql<number>`count(*)` })
       .from(quotationsTable)
-      .where(whereClause);
+      .where(whereClause ?? sql`TRUE`);
+    const total = countResult[0]?.total ?? 0;
 
     let dataQuery = db.select().from(quotationsTable).$dynamic();
     if (whereClause) dataQuery = dataQuery.where(whereClause);
@@ -311,6 +317,9 @@ router.post("/quotations/:id/re-extract", async (req, res): Promise<void> => {
       supplierEmail: extracted.supplierEmail,
       quotationNumber: extracted.quotationNumber,
       quotationDate: extracted.quotationDate,
+      clientAddress: extracted.clientAddress,
+      clientContact: extracted.clientContact,
+      clientVat: extracted.clientVat,
       currency: extracted.currency,
       paymentTerms: extracted.paymentTerms,
       deliveryTerms: extracted.deliveryTerms,

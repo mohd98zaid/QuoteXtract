@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Sun,
   Moon,
+  FilePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ export function Layout({ children }: LayoutProps) {
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
     { href: "/mail", label: "Mail", icon: Mail },
     { href: "/inbox", label: "Upload", icon: Inbox },
+    { href: "/new-quotation", label: "New Quotation", icon: FilePlus },
     { href: "/quotations", label: "Quotations", icon: FileText },
     { href: "/search", label: "Search", icon: Search },
   ];

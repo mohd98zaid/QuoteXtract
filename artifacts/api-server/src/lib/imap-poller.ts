@@ -116,7 +116,8 @@ async function pollOnce(): Promise<number> {
       // messageId deduplication prevents re-importing.
       const since = new Date();
       since.setDate(since.getDate() - 30);
-      const uids = await client.search({ since }, { uid: true });
+      const searchResult = await client.search({ since }, { uid: true });
+      const uids = Array.isArray(searchResult) ? searchResult : [];
 
       if (uids.length > 0) {
         logger.info({ count: uids.length }, "Fetching recent IMAP emails");
@@ -299,13 +300,14 @@ export async function restorePdfFromImap(messageId: string, storageKey: string):
 
     try {
       // Search for the message by Message-ID header
-      const uids = await client.search({ header: { "message-id": messageId } }, { uid: true });
+      const searchResult = await client.search({ header: { "message-id": messageId } }, { uid: true });
+      const uids = Array.isArray(searchResult) ? searchResult : [];
       if (uids.length === 0) {
         logger.warn({ messageId }, "restorePdf: message not found in INBOX");
         return false;
       }
 
-      for await (const msg of client.fetch(uids, { source: true }, { uid: true })) {
+      for await (const msg of client.fetch(uids as number[], { source: true }, { uid: true })) {
         if (!msg.source) continue;
         const parsed = await simpleParser(msg.source);
         const pdfAtts = (parsed.attachments || []).filter(

@@ -126,23 +126,12 @@ router.post("/chat", async (req, res): Promise<void> => {
     // Prepend a system prompt
     const systemPrompt = {
       role: "system" as const,
-      content: `You are QuoteXtract Assistant — a helpful, friendly, and knowledgeable AI. You can answer ANY question the user asks, on any topic. There are no restrictions on subject matter.
-
-Your PRIMARY specialty is the QuoteXtract application:
-- Searching quotations (by supplier name, customer name, or quotation number) using the "search_quotations" tool.
-- Retrieving line items/details for a specific quotation using the "get_quotation_items" tool.
-- Explaining how the application works: PDF upload & extraction, CSV import/export, email composer, admin portal, analytics, plans, etc.
-
-TOOL USAGE RULES:
-- If the user mentions a name (e.g. "IAN", "Apple", "John"), a quotation number, or explicitly asks to "search" or "find" a quotation, IMMEDIATELY call the "search_quotations" tool without asking for clarification.
-- If the user asks for items/details of a specific quotation ID, call "get_quotation_items" right away.
-- Use tools only when they are relevant to data retrieval—not for general knowledge questions.
-
-RESPONSE GUIDELINES:
-- For quotation data, format numbers clearly and use Markdown tables for multiple rows.
-- If a search yields no results, politely let the user know.
-- For general questions (coding, math, writing, advice, etc.), answer helpfully and thoroughly.
-- Keep responses concise but complete. Never refuse a question on topic grounds.`,
+      content: `You are QuoteXtract Assistant, an AI that helps users find and understand their quotation and customer data.
+CRITICAL INSTRUCTION: If the user provides a name (e.g. "IAN", "Apple", "John"), a single word, or asks to search for something, you MUST immediately call the "search_quotations" tool with that query. Do not ask for clarification first. Just search!
+Use the provided tools to fetch real data from the database.
+Always format numbers clearly. Use Markdown tables if returning multiple rows or items.
+If a search yields no results, politely inform the user.
+Keep answers concise but helpful.`,
     };
 
     const thread = [systemPrompt, ...messages];
@@ -174,7 +163,7 @@ RESPONSE GUIDELINES:
         thread.push({
           role: "tool",
           tool_call_id: toolCall.id,
-          name: toolCall.function.name,
+          name: (toolCall as any).function.name,
           content: toolResultStr,
         } as any);
       }

@@ -7,7 +7,7 @@ export interface SmtpConfig {
   host: string;
   port: number;
   secure: boolean;
-  email: string;
+  email: string | null;
   fromName: string;
   configured: boolean;
 }

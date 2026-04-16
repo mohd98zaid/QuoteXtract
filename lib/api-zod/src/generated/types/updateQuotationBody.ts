@@ -17,6 +17,12 @@ export interface UpdateQuotationBody {
   /** @nullable */
   quotationDate?: string | null;
   /** @nullable */
+  clientAddress?: string | null;
+  /** @nullable */
+  clientContact?: string | null;
+  /** @nullable */
+  clientVat?: string | null;
+  /** @nullable */
   currency?: string | null;
   /** @nullable */
   paymentTerms?: string | null;

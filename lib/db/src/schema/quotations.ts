@@ -9,11 +9,15 @@ export const quotationsTable = pgTable("quotations", {
   supplierEmail: text("supplier_email"),
   quotationNumber: text("quotation_number"),
   quotationDate: text("quotation_date"),
+  clientAddress: text("client_address"),
+  clientContact: text("client_contact"),
+  clientVat: text("client_vat"),
   currency: text("currency"),
   paymentTerms: text("payment_terms"),
   deliveryTerms: text("delivery_terms"),
   totalAmount: text("total_amount"),
-  status: text("status", { enum: ["draft", "reviewed", "approved", "rejected"] })
+  direction: text("direction", { enum: ["inbound", "outbound"] as const }).notNull().default("inbound"),
+  status: text("status", { enum: ["draft", "reviewed", "approved", "rejected"] as const })
     .notNull()
     .default("draft"),
   extractionScore: integer("extraction_score"),

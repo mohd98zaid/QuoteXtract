@@ -33,6 +33,7 @@ import {
   useListQuotations,
   useTrackMailPdf,
   getListEmailsQueryKey,
+  getListQuotationsQueryKey,
 } from "@workspace/api-client-react";
 import type { Email } from "@workspace/api-client-react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -112,7 +113,7 @@ function EmailPreviewDialog({ email, quotationId, open, onClose, onTracked }: Em
   const queryClient = useQueryClient();
 
   const canTrack =
-    email && email.pdfStorageKey && email.source === "imap" &&
+    email && email.pdfStorageKey && (email as any).source === "imap" &&
     (email.status === "pending" || email.status === "failed");
 
   const handleTrack = async () => {
@@ -120,6 +121,7 @@ function EmailPreviewDialog({ email, quotationId, open, onClose, onTracked }: Em
     try {
       const result = await trackMut.mutateAsync({ id: email.id });
       queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
       if (result.alreadyTracked) {
         toast({ title: "Already tracked", description: "This PDF is already in your quotations." });
       } else {
@@ -173,26 +175,10 @@ function EmailPreviewDialog({ email, quotationId, open, onClose, onTracked }: Em
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
-          {email.bodyText || email.bodyHtml ? (
-            email.bodyHtml ? (
-              <div
-                className="text-sm text-foreground/80 leading-relaxed [&_a]:text-primary [&_a]:underline"
-                dangerouslySetInnerHTML={{ __html: email.bodyHtml }}
-              />
-            ) : (
-              <pre className="whitespace-pre-wrap text-sm text-foreground/80 font-sans leading-relaxed">
-                {email.bodyText}
-              </pre>
-            )
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
-              <Mail className="w-10 h-10 opacity-20" />
-              <p className="text-sm">No email body available.</p>
-              {email.pdfFilename && (
-                <p className="text-xs opacity-70">The quotation data is inside the attached PDF.</p>
-              )}
-            </div>
-          )}
+          <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
+            <Mail className="w-10 h-10 opacity-20" />
+            <p className="text-sm">Please track the PDF attachment to extract data.</p>
+          </div>
         </div>
 
         <div className="border-t px-6 py-4 shrink-0 bg-muted/30 flex items-center justify-between gap-3">
@@ -314,8 +300,8 @@ export default function Inbox() {
     }
   };
 
-  const { data: emails, isLoading } = useListEmails();
-  const { data: allQuotations } = useListQuotations({});
+  const { data: emails, isLoading } = useListEmails({ query: { queryKey: getListEmailsQueryKey() } });
+  const { data: allQuotations } = useListQuotations({}, { query: { queryKey: getListQuotationsQueryKey({}) } });
 
   const emailToQuotationId = useMemo(() => {
     const map: Record<number, number> = {};
@@ -389,6 +375,53 @@ export default function Inbox() {
 
   const updateItem = (id: string, patch: Partial<FileQueueItem>) =>
     setFileQueue((q) => q.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+
+  const retryItem = async (item: FileQueueItem) => {
+    updateItem(item.id, { status: "uploading", error: undefined });
+    try {
+      const formData = new FormData();
+      formData.append("file", item.file);
+      const rawUpload = await fetch("/api/emails/upload-pdf", { method: "POST", body: formData });
+      if (rawUpload.status === 409) {
+        const body = await rawUpload.json();
+        const dup = body?.duplicate;
+        updateItem(item.id, { status: "failed", error: "Duplicate file" });
+        toast({
+          title: "Duplicate file skipped",
+          description: dup?.filename
+            ? `"${dup.filename}" is already extracted.`
+            : "This PDF was already uploaded.",
+          action: dup?.quotationId ? (
+            <ToastAction altText="View Quote" onClick={() => setLocation(`/quotations/${dup.quotationId}`)}>
+              View Quote
+            </ToastAction>
+          ) : undefined,
+        });
+        return;
+      }
+      if (!rawUpload.ok) throw new Error("Upload failed");
+      const uploadRes = await rawUpload.json() as { storageKey: string; filename: string; url: string };
+
+      updateItem(item.id, { status: "extracting" });
+      const emailRes = await createEmailMut.mutateAsync({
+        data: {
+          subject: `Uploaded: ${item.file.name}`,
+          pdfFilename: uploadRes.filename,
+          pdfStorageKey: uploadRes.storageKey,
+          receivedAt: new Date().toISOString(),
+        },
+      });
+      const quotationRes = await extractMut.mutateAsync({
+        data: { emailId: emailRes.id, pdfStorageKey: uploadRes.storageKey },
+      });
+      updateItem(item.id, { status: "done", quotationId: quotationRes.id });
+      queryClient.invalidateQueries({ queryKey: getListEmailsQueryKey() });
+      toast({ title: "PDF extracted", description: `${item.file.name} processed successfully.` });
+    } catch {
+      updateItem(item.id, { status: "failed", error: "Processing failed" });
+      toast({ variant: "destructive", title: "Retry failed", description: `Could not process ${item.file.name}.` });
+    }
+  };
 
   const processFiles = async (files: File[]) => {
     const pdfs = files.filter((f) => f.type === "application/pdf");
@@ -538,7 +571,7 @@ export default function Inbox() {
     <div className="space-y-6 flex flex-col h-full">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Upload</h1>
-        <p className="text-muted-foreground">Extract quotation data from PDF files using AI.</p>
+        <p className="text-muted-foreground">Extract quotation data from PDF files using Offline Parser.</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
@@ -686,6 +719,16 @@ export default function Inbox() {
                         View <ArrowRight className="w-3 h-3 ml-1" />
                       </Button>
                     )}
+                    {item.status === "failed" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs shrink-0 gap-1 text-primary border-primary/40 hover:bg-primary/10"
+                        onClick={() => retryItem(item)}
+                      >
+                        <RefreshCw className="w-3 h-3" /> Retry
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -770,7 +813,7 @@ export default function Inbox() {
                       const isSelected = selectedIds.has(email.id);
                       const isDeleting = deletingId === email.id;
                       const canReview =
-                        email.source === "imap" &&
+                        (email as any).source === "imap" &&
                         (email.status === "pending" || email.status === "failed");
                       return (
                         <TableRow

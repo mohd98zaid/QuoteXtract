@@ -63,7 +63,7 @@ router.post(
       .from(emailsTable)
       .where(eq(emailsTable.pdfSha256, sha256));
 
-    if (existing) {
+    if (existing && existing.status === "extracted") {
       await fs.promises.unlink(filePath).catch(() => {});
       
       const [quote] = await db
@@ -110,6 +110,7 @@ router.get("/pdfs/:key", async (req, res): Promise<void> => {
   }
 
   res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="${raw}"`);
   res.sendFile(filePath);
 });
 

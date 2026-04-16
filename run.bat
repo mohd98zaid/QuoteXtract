@@ -33,33 +33,33 @@ echo.
 
 :: ── Copy .env if it does not exist ───────────────────────────────
 :: ── Setup Environment (.env) if missing ─────────────────────────
-if not exist ".env" (
-    if exist ".env.example" (
-        echo  [INFO] No .env file found. Creating first-time configuration...
-        copy /Y ".env.example" ".env" >nul
-        echo  [INFO] .env created from .env.example.
-        echo.
-        echo  = IMPORTANT ==========================================
-        echo  A .env file has been created. It is recommended to edit 
-        echo  it to set your own SESSION_SECRET and other credentials.
-        echo.
-        echo  Press any key to open .env for review, then CLOSE it 
-        echo  and return here to continue the launch.
-        echo  ======================================================
-        pause >nul
-        start notepad .env
-        echo.
-        echo  Waiting for you to return...
-        pause
-    ) else (
-        echo  [WARN] No .env or .env.example found. 
-        echo         Using Docker Compose internal defaults.
-        echo.
-    )
-) else (
-    echo  [OK] .env file found.
-)
-echo.
+@REM if not exist ".env" (
+@REM     if exist ".env.example" (
+@REM         echo  [INFO] No .env file found. Creating first-time configuration...
+@REM         copy /Y ".env.example" ".env" >nul
+@REM         echo  [INFO] .env created from .env.example.
+@REM         echo.
+@REM         echo  = IMPORTANT ==========================================
+@REM         echo  A .env file has been created. It is recommended to edit 
+@REM         echo  it to set your own SESSION_SECRET and other credentials.
+@REM         echo.
+@REM         echo  Press any key to open .env for review, then CLOSE it 
+@REM         echo  and return here to continue the launch.
+@REM         echo  ======================================================
+@REM         pause >nul
+@REM         start notepad .env
+@REM         echo.
+@REM         echo  Waiting for you to return...
+@REM         pause
+@REM     ) else (
+@REM         echo  [WARN] No .env or .env.example found. 
+@REM         echo         Using Docker Compose internal defaults.
+@REM         echo.
+@REM     )
+@REM ) else (
+@REM     echo  [OK] .env file found.
+@REM )
+@REM echo.
 
 :: ── Pull the local AI model (download only — does NOT open chat) ──
 echo  [STEP 1/3] Pulling local AI model via Docker Model Runner...
@@ -67,6 +67,8 @@ echo             (This may take a few minutes on first run — model is ~1.1 GB)
 echo.
 docker model pull hf.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF:q4_k_m
 @REM docker model pull hf.co/unsloth/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M 2>&1
+@REM docker model run hf.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF:q4_k_m
+
 if %errorlevel% neq 0 (
     echo.
     echo  [WARN] Could not pull the local AI model.

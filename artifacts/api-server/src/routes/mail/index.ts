@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { db, emailsTable, quotationsTable, quotationItemsTable } from "@workspace/db";
-import { openai } from "@workspace/integrations-local-ai-server";
 import { z } from "zod";
 import { extractFromPdf } from "../../lib/pdf-extractor";
 import { logger } from "../../lib/logger";
@@ -219,74 +218,6 @@ router.post("/mail/scan", async (_req, res): Promise<void> => {
   res.json({ success: true, ...result });
 });
 
-// ── POST /api/mail/enhance ──────────────────────────────────────────────────
-// Enhance a draft email, generating a smart polite reply using the local AI.
-const EnhanceMailSchema = z.object({
-  draftText: z.string(),
-  originalText: z.string().optional(),
-});
 
-router.post("/mail/enhance", async (req, res): Promise<void> => {
-  try {
-    const parsed = EnhanceMailSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.issues, code: "VALIDATION_ERROR" });
-      return;
-    }
-
-    const { draftText, originalText } = parsed.data;
-
-    const MODEL = process.env.LOCAL_AI_MODEL ?? "gpt-4o";
-
-    const systemPrompt = `You are an expert business communication assistant.
-Your job is to take a rough draft and rewrite it into a polite, highly professional corporate email.
-You MUST output your response in exactly the following format:
-
-SUBJECT: <professional subject line here>
-BODY:
-<the professional email body here>
-
-Do not include any other text, greetings like "Here is your email:", or markdown code blocks. Always maintain a strictly professional tone.`;
-
-    const userPrompt = `ORIGINAL EMAIL CONTEXT:
-${originalText ? originalText : "None provided."}
-
-MY ROUGH DRAFT:
-${draftText}
-
-Please refine my draft into a clean, professional email ready to send.`;
-
-    const response = await openai.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ]
-    });
-
-    const output = response.choices[0]?.message?.content?.trim() || "";
-    
-    let subject = "";
-    let enhancedBody = output;
-    
-    const match = output.match(/SUBJECT:\s*(.*?)\n+BODY:\s*([\s\S]*)/i);
-    if (match) {
-      subject = match[1].trim();
-      enhancedBody = match[2].trim();
-    } else {
-      // Fallback if the AI fails the strict formatting
-      const lines = output.split('\n');
-      if (lines[0].toUpperCase().startsWith("SUBJECT:")) {
-        subject = lines[0].replace(/SUBJECT:/i, "").trim();
-        enhancedBody = lines.slice(1).join("\n").replace(/^BODY:/i, "").trim();
-      }
-    }
-
-    res.json({ enhanced: enhancedBody, subject: subject });
-  } catch (err: any) {
-    req.log.error(err, "Mail enhance error");
-    res.status(500).json({ error: "Failed to enhance email" });
-  }
-});
 
 export default router;

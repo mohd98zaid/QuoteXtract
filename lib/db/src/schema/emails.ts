@@ -15,9 +15,9 @@ export const emailsTable = pgTable("emails", {
   bodyHtml: text("body_html"),
   isRead: boolean("is_read").notNull().default(false),
   messageId: text("message_id"),
-  source: text("source", { enum: ["upload", "imap", "webhook", "sent"] }).notNull().default("upload"),
+  source: text("source", { enum: ["upload", "imap", "webhook", "sent"] as const }).notNull().default("upload"),
   recipientEmail: text("recipient_email"),
-  status: text("status", { enum: ["pending", "processing", "extracted", "failed"] })
+  status: text("status", { enum: ["pending", "processing", "extracted", "failed"] as const })
     .notNull()
     .default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

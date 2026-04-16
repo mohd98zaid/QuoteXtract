@@ -90,6 +90,12 @@ export interface Quotation {
   /** @nullable */
   quotationDate?: string | null;
   /** @nullable */
+  clientAddress?: string | null;
+  /** @nullable */
+  clientContact?: string | null;
+  /** @nullable */
+  clientVat?: string | null;
+  /** @nullable */
   currency?: string | null;
   /** @nullable */
   paymentTerms?: string | null;
@@ -156,6 +162,12 @@ export interface UpdateQuotationBody {
   quotationNumber?: string | null;
   /** @nullable */
   quotationDate?: string | null;
+  /** @nullable */
+  clientAddress?: string | null;
+  /** @nullable */
+  clientContact?: string | null;
+  /** @nullable */
+  clientVat?: string | null;
   /** @nullable */
   currency?: string | null;
   /** @nullable */
@@ -268,8 +280,6 @@ export interface MailItem {
   /** @nullable */
   senderEmail?: string | null;
   /** @nullable */
-  recipientEmail?: string | null;
-  /** @nullable */
   subject?: string | null;
   /** @nullable */
   receivedAt?: string | null;
@@ -283,10 +293,6 @@ export interface MailItem {
   /** @nullable */
   bodyText?: string | null;
   createdAt: string;
-}
-
-export interface ListMailParams {
-  source?: "imap" | "sent";
 }
 
 export type MailDetail = MailItem & {

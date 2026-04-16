@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Search as SearchIcon, FileText, Package, ArrowRight } from "lucide-react";
-import { useSearchQuotations } from "@workspace/api-client-react";
+import { useSearchQuotations, getSearchQuotationsQueryKey } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ export default function Search() {
 
   const { data: searchResults, isLoading } = useSearchQuotations(
     { q: activeSearch },
-    { query: { enabled: activeSearch.length > 2 } }
+    { query: { queryKey: getSearchQuotationsQueryKey({ q: activeSearch }), enabled: activeSearch.length > 2 } }
   );
 
   const handleSearch = (e: React.FormEvent) => {

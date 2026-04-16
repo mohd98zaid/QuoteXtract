@@ -73,7 +73,7 @@ export default function QuotationDetail() {
   const quotationId = parseInt(id || "0", 10);
 
   const { data: quotation, isLoading } = useGetQuotation(quotationId, {
-    query: { enabled: !!quotationId }
+    query: { queryKey: getGetQuotationQueryKey(quotationId), enabled: !!quotationId }
   });
 
   const { data: events } = useQuery<QuotationEvent[]>({
@@ -105,7 +105,7 @@ export default function QuotationDetail() {
       queryClient.invalidateQueries({ queryKey: getGetQuotationQueryKey(quotationId) });
       queryClient.invalidateQueries({ queryKey: ["quotation-events", quotationId] });
       queryClient.invalidateQueries({ queryKey: getListQuotationsQueryKey() });
-      toast({ title: "Re-extraction complete", description: "AI has re-read the PDF and updated all fields." });
+      toast({ title: "Re-extraction complete", description: "The PDF was re-read and all fields have been updated." });
     },
     onError: (err: Error) => {
       toast({ variant: "destructive", title: "Re-extraction failed", description: err.message });
@@ -130,6 +130,9 @@ export default function QuotationDetail() {
         supplierName: quotation.supplierName || "",
         quotationNumber: quotation.quotationNumber || "",
         quotationDate: quotation.quotationDate || "",
+        clientAddress: quotation.clientAddress || "",
+        clientContact: quotation.clientContact || "",
+        clientVat: quotation.clientVat || "",
         currency: quotation.currency || "",
         paymentTerms: quotation.paymentTerms || "",
         deliveryTerms: quotation.deliveryTerms || "",
@@ -318,9 +321,19 @@ export default function QuotationDetail() {
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-muted-foreground uppercase">Customer</label>
                   {isEditing ? (
-                    <Input value={formData.supplierName} onChange={(e) => setFormData({ ...formData, supplierName: e.target.value })} />
+                    <div className="space-y-2">
+                      <Input placeholder="Client Name" value={formData.supplierName} onChange={(e) => setFormData({ ...formData, supplierName: e.target.value })} />
+                      <Textarea placeholder="Client Address" value={formData.clientAddress} onChange={(e) => setFormData({ ...formData, clientAddress: e.target.value })} rows={2} />
+                      <Input placeholder="Contact number/email" value={formData.clientContact} onChange={(e) => setFormData({ ...formData, clientContact: e.target.value })} />
+                      <Input placeholder="VAT/TRN Number" value={formData.clientVat} onChange={(e) => setFormData({ ...formData, clientVat: e.target.value })} />
+                    </div>
                   ) : (
-                    <div className="font-medium">{quotation.supplierName || '-'}</div>
+                    <div className="font-medium">
+                      <p>{quotation.supplierName || '-'}</p>
+                      {quotation.clientAddress && <p className="text-sm font-normal whitespace-pre-wrap mt-0.5">{quotation.clientAddress}</p>}
+                      {quotation.clientContact && <p className="text-sm font-normal text-muted-foreground mt-0.5">{quotation.clientContact}</p>}
+                      {quotation.clientVat && <p className="text-sm font-normal text-muted-foreground mt-0.5">TRN: {quotation.clientVat}</p>}
+                    </div>
                   )}
                 </div>
                 <div className="space-y-1">
@@ -680,9 +693,9 @@ export default function QuotationDetail() {
       <AlertDialog open={showReExtractConfirm} onOpenChange={setShowReExtractConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Re-extract with AI?</AlertDialogTitle>
+            <AlertDialogTitle>Re-extract from PDF?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will ask GPT-4o to re-read the PDF and overwrite all extracted fields and line items. Your manual edits will be lost.
+              This will re-read the PDF and overwrite all extracted fields and line items. Your manual edits will be lost.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

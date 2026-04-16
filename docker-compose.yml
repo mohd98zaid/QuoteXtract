@@ -32,7 +32,7 @@ services:
       # Local LLM via llm-proxy container
       LOCAL_AI_BASE_URL: http://host.docker.internal:11434/engines/llama.cpp/v1
       LOCAL_AI_API_KEY: local
-      LOCAL_AI_MODEL: hf.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF:q4_k_m
+      LOCAL_AI_MODEL: huggingface.co/qwen/qwen2.5-1.5b-instruct-gguf:q4_k_m
       # IMAP settings (optional — leave blank to disable email polling)
 
       IMAP_HOST: ${IMAP_HOST:-imap.hostinger.com}

@@ -26,6 +26,7 @@ import {
 import {
   useGetImapStatus,
   useConfigureImap,
+  getGetImapStatusQueryKey,
 } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -33,8 +34,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Image as ImageIcon } from "lucide-react";
 
 interface EmailAlias { email: string; name: string; }
+
+const toBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.readAsDataURL(file);
+  reader.onload = () => resolve(reader.result as string);
+  reader.onerror = error => reject(error);
+});
 
 function StatPill({
   icon,
@@ -113,8 +122,24 @@ export default function SettingsPage() {
   const [newAliasEmail, setNewAliasEmail] = useState("");
   const [newAliasName, setNewAliasName] = useState("");
 
+  const [logoDataUrl, setLogoDataUrl] = useState<string>(() => localStorage.getItem("quotation_logo") || "");
+  const [stampDataUrl, setStampDataUrl] = useState<string>(() => localStorage.getItem("quotation_stamp") || "");
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, key: string, setter: React.Dispatch<React.SetStateAction<string>>) => {
+    if (e.target.files && e.target.files[0]) {
+      const base64 = await toBase64(e.target.files[0]);
+      try {
+        localStorage.setItem(key, base64);
+        setter(base64);
+        toast({ title: "Template updated", description: `Default ${key.split('_')[1]} saved.` });
+      } catch (err) {
+        toast({ variant: "destructive", title: "Image too large", description: "Failed to save. Try a smaller image." });
+      }
+    }
+  };
+
   const { data: imap, isLoading: imapLoading, refetch: refetchImap, isFetching: imapFetching } =
-    useGetImapStatus({ query: { refetchInterval: 60_000 } });
+    useGetImapStatus({ query: { queryKey: getGetImapStatusQueryKey(), refetchInterval: 60_000 } });
 
   const { data: smtp, isLoading: smtpLoading, refetch: refetchSmtp } = useQuery({
     queryKey: ["smtp-status"],
@@ -480,6 +505,64 @@ export default function SettingsPage() {
               Add Alias
             </Button>
           </form>
+        </div>
+      </div>
+
+      {/* Quotation Defaults */}
+      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="h-1 w-full bg-gradient-to-r from-orange-500 to-red-500" />
+        <div className="px-6 pt-5 pb-4 border-b border-border flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-muted flex items-center justify-center shrink-0">
+            <ImageIcon className="w-5 h-5 text-foreground" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-foreground">Quotation Defaults</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Set the default logo and authorized signature/stamp for your PDF quotations.
+            </p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               <div className="space-y-3">
+                 <Label>Company Logo</Label>
+                 <div className="flex flex-col gap-3">
+                   <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
+                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                       <ImageIcon className="w-6 h-6 text-muted-foreground mb-2" />
+                       <p className="text-xs text-muted-foreground">Upload Logo</p>
+                     </div>
+                     <input type="file" className="hidden" accept="image/png, image/jpeg" onChange={(e) => handleFileChange(e, "quotation_logo", setLogoDataUrl)} />
+                   </label>
+                   {logoDataUrl && (
+                     <div className="flex items-center gap-4 border rounded-lg p-2 bg-white w-max">
+                        <img src={logoDataUrl} alt="Logo preview" className="h-16 w-auto object-contain" />
+                        <Button type="button" variant="ghost" size="sm" onClick={() => { localStorage.removeItem('quotation_logo'); setLogoDataUrl(""); }} className="text-destructive hover:text-destructive hover:bg-destructive/10">Clear</Button>
+                     </div>
+                   )}
+                 </div>
+               </div>
+               
+               <div className="space-y-3">
+                 <Label>Stamp / Signature</Label>
+                 <div className="flex flex-col gap-3">
+                   <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
+                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                       <ImageIcon className="w-6 h-6 text-muted-foreground mb-2" />
+                       <p className="text-xs text-muted-foreground">Upload Stamp</p>
+                     </div>
+                     <input type="file" className="hidden" accept="image/png, image/jpeg" onChange={(e) => handleFileChange(e, "quotation_stamp", setStampDataUrl)} />
+                   </label>
+                   {stampDataUrl && (
+                     <div className="flex items-center gap-4 border rounded-lg p-2 bg-white w-max">
+                        <img src={stampDataUrl} alt="Stamp preview" className="h-16 w-auto object-contain" />
+                        <Button type="button" variant="ghost" size="sm" onClick={() => { localStorage.removeItem('quotation_stamp'); setStampDataUrl(""); }} className="text-destructive hover:text-destructive hover:bg-destructive/10">Clear</Button>
+                     </div>
+                   )}
+                 </div>
+               </div>
+            </div>
         </div>
       </div>
     </div>

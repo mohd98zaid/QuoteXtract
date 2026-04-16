@@ -19,30 +19,69 @@ AI-powered quotation PDF extraction dashboard. Upload PDFs or connect your email
 
 ---
 
-## Architecture
+## Architecture & Data Flow
 
+QuoteXtract operates on a multi-tier client-server architecture with two primary data flow pipelines: **Inbound Extraction (AI)** and **Outbound Generation (Native Print)**.
+
+### System Architecture
+
+```mermaid
+graph TD
+    subgraph Client Application
+        UI[Dashboard / React]
+        PDFEng[HTML-to-PDF Generator]
+    end
+
+    subgraph Backend Services
+        API[API Server / Node.js]
+        IMAP[IMAP Poller]
+        SMTP[SMTP Sender]
+        PDFExt[PDF Extractor]
+    end
+
+    subgraph Infrastructure
+        DB[(PostgreSQL)]
+        AI[AI LLM Docker Model Runner]
+    end
+
+    UI <--> |REST/JSON| API
+    IMAP --> |Fetch Attachments| PDFExt
+    PDFExt --> |Raw PDF Text| AI
+    AI --> |Structured JSON| API
+    API --> |CRUD| DB
+    UI --> |Send Emails| SMTP
+    UI --> |Trigger System Print| PDFEng
 ```
-┌──────────────────────┐     ┌─────────────────────┐     ┌──────────────┐
-│  Dashboard (React)   │────▶│  API Server (Node)  │────▶│  PostgreSQL  │
-│  Vite + Tailwind     │     │  Express + TypeScript│     │              │
-│  Port 3000           │     │  Port 8080           │     │  Port 5432   │
-└──────────────────────┘     └──────────┬──────────┘     └──────────────┘
-                                        │
-                             ┌──────────▼──────────┐
-                             │  AI Model Runner     │
-                             │  (local LLM / OpenAI)│
-                             └─────────────────────┘
-```
+
+### Data Flow
+
+#### 1. Inbound Pipeline: Email & Upload Extraction
+1. **Source**: Quotations arrive via bulk PDF upload or automatic IMAP inbox polling (every 60 seconds).
+2. **Parsing**: The backend passes the PDFs to `pdftotext` to extract raw bounding-box text geometry.
+3. **AI structuring**: Raw text is forwarded to the AI Model Runner (either Local `docker model run` or OpenAI's API GPT-4o vision fallback). 
+4. **Ingestion**: AI parses out Line Items, Meta fields, Totals, and computes an `extractionScore`. Data is seeded into PostgreSQL `quotations` and `quotation_items` tables with a `draft` status.
+5. **Review Workflow**: The frontend Dashboard accesses the portal via REST routes. Users review the parsed data against the inline React-PDF viewer frame and update records to `approved` or `rejected`.
+
+#### 2. Outbound Pipeline: Custom Quotation Generation
+1. **Creation**: Users navigate to the New Quotation pane to build a custom quotation form from scratch.
+2. **Live Rendering**: The application uses a custom DOM-to-Print React component (`QuotationDocument.tsx`) heavily styled with Tailwind to exactly mirror complex legacy PDF layouts (using pixel-perfect grids and custom metadata fields like Destination & Warranty).
+3. **Export and Track**:
+   - The user triggers native `window.print()` to locally export the file as A4 scale.
+   - Upon closing the print dialog, the system prompts the user to "Track in Portal".
+   - Using the Frontend Zod Schema, the client directly fires an async multi-part POST request back to the API Server.
+   - The generated record is ingested natively into PostgreSQL (`quotations` → `quotation_items`), bypassing the AI pipeline completely for 100% accuracy data integrity matching.
+
+### Tech Stack Breakdown
 
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18, Vite, Tailwind CSS, shadcn/ui |
-| Backend | Node.js, Express, TypeScript |
-| Database | PostgreSQL 16 |
+| Backend | Node.js, Express, TypeScript, Zod |
+| Database | PostgreSQL 16, Drizzle ORM |
 | AI | Docker Model Runner (local) or OpenAI GPT-4o |
 | Email | ImapFlow (IMAP polling), Nodemailer (SMTP) |
-| PDF | pdftotext (poppler-utils) |
-| Container | Docker Compose |
+| PDF | `pdftotext` (poppler-utils), Native Browser Printing |
+| Container | Docker Compose, NGINX |
 
 ---
 

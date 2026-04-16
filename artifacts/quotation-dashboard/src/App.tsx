@@ -1,3 +1,8 @@
+if (typeof window !== 'undefined') {
+  (window as any).global = window;
+  (window as any).process = { env: {} };
+}
+
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -12,6 +17,7 @@ import QuotationsList from "@/pages/quotations";
 import QuotationDetail from "@/pages/quotation-detail";
 import Search from "@/pages/search";
 import SettingsPage from "@/pages/settings";
+import NewQuotationPage from "@/pages/new-quotation";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +40,7 @@ function Router() {
         <Route path="/quotations" component={QuotationsList} />
         <Route path="/quotations/:id" component={QuotationDetail} />
         <Route path="/search" component={Search} />
+        <Route path="/new-quotation" component={NewQuotationPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>

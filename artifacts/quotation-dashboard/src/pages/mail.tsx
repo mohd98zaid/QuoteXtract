@@ -28,7 +28,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Undo,
 } from "lucide-react";
 import {
   useListMail,
@@ -386,7 +385,7 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
   const queryClient = useQueryClient();
 
   const { data: detail, isLoading } = useGetMail(mailId, {
-    query: { enabled: mailId > 0 },
+    query: { enabled: mailId > 0, queryKey: getGetMailQueryKey(mailId) },
   });
 
   if (isLoading) {
@@ -707,8 +706,6 @@ function ComposeDialog({
   const [selectedFrom, setSelectedFrom] = useState<FromOption | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [enhancing, setEnhancing] = useState(false);
-  const [previousSubject, setPreviousSubject] = useState<string | null>(null);
-  const [previousBody, setPreviousBody] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: smtpStatus } = useQuery({
@@ -799,13 +796,7 @@ function ComposeDialog({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to elevate draft");
-      
-      setPreviousSubject(subject);
-      setPreviousBody(body);
-      
-      if (data.subject) setSubject(data.subject);
       setBody(data.enhanced);
-      
       toast({ title: "Draft enhanced ✨", description: "AI has rewritten your message." });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Enhancement failed";
@@ -817,72 +808,72 @@ function ComposeDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-end p-6 pointer-events-none">
-      <div className="w-[600px] bg-card border border-border/80 rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] flex flex-col pointer-events-auto max-h-[75vh]">
+      <div className="w-[520px] bg-card border border-border rounded-xl shadow-2xl flex flex-col pointer-events-auto max-h-[640px]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 bg-[#1B1F3B] rounded-t-2xl shrink-0">
-          <span className="text-[15px] font-semibold text-white">{title}</span>
-          <button type="button" onClick={onClose} className="text-white/50 hover:text-white hover:bg-white/10 p-1.5 rounded-md transition-colors">
+        <div className="flex items-center justify-between px-4 py-3 bg-[#1B1F3B] rounded-t-xl shrink-0">
+          <span className="text-sm font-semibold text-white">{title}</span>
+          <button type="button" onClick={onClose} className="text-white/60 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
         {/* Fields */}
-        <div className="flex flex-col shrink-0 px-2 pt-2 pb-0">
+        <div className="divide-y divide-border shrink-0">
           {/* From */}
           {fromOptions.length > 0 && (
-            <div className="flex items-center gap-3 px-4 py-2 border-b border-border/40">
-              <span className="text-[13px] font-medium text-muted-foreground w-12 shrink-0">From</span>
+            <div className="flex items-center gap-2 px-4 py-2.5">
+              <span className="text-xs text-muted-foreground w-12 shrink-0">From</span>
               {hasMultipleFrom ? (
                 <DropdownMenu open={fromDropdownOpen} onOpenChange={setFromDropdownOpen}>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="flex-1 flex items-center justify-between h-8 text-[14px] text-foreground bg-transparent hover:bg-muted/40 rounded px-2 transition-colors -ml-2"
+                      className="flex-1 flex items-center justify-between h-7 text-sm text-foreground bg-transparent hover:bg-muted/50 rounded px-1.5 transition-colors"
                     >
                       <span className="truncate">{activeFrom?.label ?? "Select sender…"}</span>
-                      <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0 ml-1" />
+                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-1" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-[450px]">
+                  <DropdownMenuContent align="start" className="w-[400px]">
                     {fromOptions.map((opt) => (
                       <DropdownMenuItem
                         key={opt.email}
                         onClick={() => { setSelectedFrom(opt); setFromDropdownOpen(false); }}
                         className={cn(activeFrom?.email === opt.email && "bg-accent")}
                       >
-                        <Send className="w-4 h-4 mr-2 text-violet-500 shrink-0" />
-                        <span className="truncate text-sm">{opt.label}</span>
+                        <Send className="w-3.5 h-3.5 mr-2 text-violet-500 shrink-0" />
+                        <span className="truncate">{opt.label}</span>
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                <span className="text-[14px] text-foreground truncate">{activeFrom?.label}</span>
+                <span className="text-sm text-foreground truncate">{activeFrom?.label}</span>
               )}
             </div>
           )}
-          <div className="flex items-center gap-3 px-4 py-2 border-b border-border/40">
-            <span className="text-[13px] font-medium text-muted-foreground w-12 shrink-0">To</span>
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <span className="text-xs text-muted-foreground w-12 shrink-0">To</span>
             <input
-              className="flex-1 h-8 text-[14px] bg-transparent outline-none text-foreground placeholder:text-muted-foreground/60"
+              className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
               placeholder="recipient@example.com"
               value={to}
               onChange={(e) => setTo(e.target.value)}
               autoFocus
             />
           </div>
-          <div className="flex items-center gap-3 px-4 py-2 border-b border-border/40">
-            <span className="text-[13px] font-medium text-muted-foreground w-12 shrink-0">Cc</span>
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <span className="text-xs text-muted-foreground w-12 shrink-0">Cc</span>
             <input
-              className="flex-1 h-8 text-[14px] bg-transparent outline-none text-foreground placeholder:text-muted-foreground/60"
+              className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
               placeholder="optional"
               value={cc}
               onChange={(e) => setCc(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-3 px-4 py-2 border-b border-border/40">
-            <span className="text-[13px] font-medium text-muted-foreground w-12 shrink-0">Subject</span>
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <span className="text-xs text-muted-foreground w-12 shrink-0">Subject</span>
             <input
-              className="flex-1 h-8 text-[14px] font-medium bg-transparent outline-none text-foreground placeholder:text-muted-foreground/60"
+              className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
               placeholder="Subject line"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
@@ -891,7 +882,7 @@ function ComposeDialog({
         </div>
         {/* Body */}
         <textarea
-          className="flex-1 resize-none px-6 py-4 text-[14px] leading-relaxed bg-transparent outline-none min-h-[220px] text-foreground placeholder:text-muted-foreground/60"
+          className="flex-1 resize-none px-4 py-3 text-sm bg-transparent outline-none min-h-[160px] text-foreground placeholder:text-muted-foreground"
           placeholder="Write your message…"
           value={body}
           onChange={(e) => setBody(e.target.value)}
@@ -923,66 +914,38 @@ function ComposeDialog({
         />
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-4 border-t border-border/50 shrink-0 bg-muted/20 rounded-b-2xl">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border shrink-0">
+          <div className="flex items-center gap-2">
             <Button
               size="sm"
-              className="bg-violet-600 hover:bg-violet-700 text-white gap-2 font-semibold px-4 h-9"
+              className="bg-violet-600 hover:bg-violet-700 text-white gap-2"
               onClick={handleSend}
               disabled={sending}
             >
-              {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
               {sending ? "Sending…" : "Send"}
             </Button>
-            
-            <div className="flex items-center gap-1.5 ml-1">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-2 border-violet-500/30 text-violet-700 font-medium hover:bg-violet-50 hover:text-violet-800 dark:text-violet-300 dark:border-violet-400/30 dark:hover:bg-violet-500/20 px-3 h-9 bg-background shadow-sm"
-                    onClick={handleEnhance}
-                    disabled={enhancing || sending}
-                  >
-                    {enhancing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-violet-500" />}
-                    <span className="hidden sm:inline">{enhancing ? "Writing..." : "AI Enhance"}</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">Autofill a professional subject & message</TooltipContent>
-              </Tooltip>
-              
-              {previousBody !== null && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="gap-1.5 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-500/10 px-2.5 h-9 font-medium"
-                      onClick={() => {
-                        setSubject(previousSubject || "");
-                        setBody(previousBody || "");
-                        setPreviousSubject(null);
-                        setPreviousBody(null);
-                        toast({ title: "AI format reverted", description: "Your original draft has been restored." });
-                      }}
-                    >
-                      <Undo className="w-4 h-4" />
-                      Undo AI
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">Revert to my original text</TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-            
-            <div className="w-px h-6 bg-border mx-1" />
-            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 border-violet-500/30 text-violet-600 hover:bg-violet-50 hover:text-violet-700 dark:text-violet-400 dark:border-violet-400/30 dark:hover:bg-violet-500/20 px-2"
+                  onClick={handleEnhance}
+                  disabled={enhancing || sending}
+                >
+                  {enhancing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  <span className="hidden sm:inline">{enhancing ? "✨ Writing..." : "✨ AI Enhance"}</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">Rewrite my draft politely</TooltipContent>
+            </Tooltip>
+            <div className="w-px h-5 bg-border mx-0.5" />
             <button
               type="button"
               title="Attach files"
               onClick={() => fileInputRef.current?.click()}
-              className="p-2 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
               <Paperclip className="w-4 h-4" />
             </button>
@@ -1017,12 +980,12 @@ export default function MailPage() {
   };
 
   const { data: mails, isLoading, refetch } = useListMail({
-    query: { refetchInterval: 60_000 },
+    query: { refetchInterval: 60_000, queryKey: getListMailQueryKey() },
   });
 
   const { data: sentMails, refetch: refetchSent } = useListMail({
     params: { source: "sent" },
-    query: { refetchInterval: 60_000 },
+    query: { refetchInterval: 60_000, queryKey: getListMailQueryKey({ source: "sent" }) },
   });
 
   const fetchNowMut = useMutation({

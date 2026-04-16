@@ -15,6 +15,9 @@ export interface ExtractedQuotation {
   supplierEmail: string | null;
   quotationNumber: string | null;
   quotationDate: string | null;
+  clientAddress?: string | null;
+  clientContact?: string | null;
+  clientVat?: string | null;
   currency: string | null;
   paymentTerms: string | null;
   deliveryTerms: string | null;
@@ -54,23 +57,21 @@ export async function extractFromPdf(storageKey: string): Promise<ExtractedQuota
   }
 
   const pdfText = await extractTextFromPdf(filePath);
-  
-  if (!pdfText) {
-    console.warn(`[PDF Extractor] No text extracted from ${storageKey}. The file might be a scanned image or empty.`);
-  } else {
-    console.log(`[PDF Extractor] Extracted ${pdfText.length} characters from ${storageKey}. First 100 chars: "${pdfText.substring(0, 100).replace(/\n/g, ' ')}..."`);
-  }
-  
+
   // Truncate PDF text so a small local model won't OOM or loop
   const truncatedText = pdfText.slice(0, 3000) || "(No text extracted — may be scanned image. Use extractionScore: 0.)";
 
-  const systemPrompt = `You are a data extraction AI. You extract structured data from documents into a JSON object. No markdown, no explanations.`;
+  const systemPrompt = `You are a data extraction AI. You extract structured data from documents into a JSON object. No markdown, no explanations. 
+CRITICAL RULE: The TRN '104330330200003' and the company 'PLUMS AND PEARLS FZE LLC' belong to the issuer/supplier, NOT the customer. You must NEVER extract '104330330200003' as the customer VAT or clientVat. Find the specific customer's VAT/TRN. If the document has no other TRN for the customer, set clientVat to null.`;
 
   const userPrompt = `Extract information from the document text below into a JSON object. Use null if a field is not found.
 
 JSON Schema format to follow:
 {
-  "customerNameAndAddress": "string | null",
+  "supplierName": "string | null (Name of the customer receiving the quote)",
+  "clientAddress": "string | null",
+  "clientContact": "string | null",
+  "clientVat": "string | null",
   "supplierEmail": "string | null",
   "quotationNumber": "string | null",
   "quotationDate": "string | null (YYYY-MM-DD)",
@@ -137,12 +138,6 @@ JSON:`;
 
   // Determine if this is a quotation based on whether anything useful was extracted
   const hasItems = extracted.items && extracted.items.length > 0;
-  
-  // Remap the prompt-specific customerKey to the typescript interface's supplierName
-  if (extracted.customerNameAndAddress !== undefined) {
-    extracted.supplierName = extracted.customerNameAndAddress;
-    delete extracted.customerNameAndAddress;
-  }
 
   const hasRef = !!extracted.quotationNumber || !!extracted.supplierName || !!extracted.totalAmount;
   

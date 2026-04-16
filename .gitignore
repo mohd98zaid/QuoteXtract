@@ -53,3 +53,9 @@ Thumbs.db
 *.log
 *.txt
 *.pdf
+
+# Temporary and Report Files
+scratch/
+temp_pdf_analysis/
+eslint_report.json
+claude.md
