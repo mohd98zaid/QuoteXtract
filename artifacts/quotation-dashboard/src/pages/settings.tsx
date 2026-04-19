@@ -24,8 +24,6 @@ import {
   AtSign,
 } from "lucide-react";
 import {
-  useGetImapStatus,
-  useConfigureImap,
   getGetImapStatusQueryKey,
 } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -35,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Image as ImageIcon } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface EmailAlias { email: string; name: string; }
 
@@ -114,10 +113,24 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Hostinger default server settings
+  const HOSTINGER_IMAP_HOST = "imap.hostinger.com";
+  const HOSTINGER_SMTP_HOST = "smtp.hostinger.com";
+
   const [email, setEmail] = useState("");
+  const [label, setLabel] = useState("");
   const [password, setPassword] = useState("");
   const [fromName, setFromName] = useState("");
+  const [imapHost, setImapHost] = useState(HOSTINGER_IMAP_HOST);
+  const [imapPort, setImapPort] = useState(993);
+  const [smtpHost, setSmtpHost] = useState(HOSTINGER_SMTP_HOST);
+  const [smtpPort, setSmtpPort] = useState(465);
   const [showForm, setShowForm] = useState(false);
+
+  // Just update the email; Hostinger server fields stay pre-filled (user can override)
+  const handleEmailChange = (val: string) => {
+    setEmail(val);
+  };
 
   const [newAliasEmail, setNewAliasEmail] = useState("");
   const [newAliasName, setNewAliasName] = useState("");
@@ -138,36 +151,55 @@ export default function SettingsPage() {
     }
   };
 
-  const { data: imap, isLoading: imapLoading, refetch: refetchImap, isFetching: imapFetching } =
-    useGetImapStatus({ query: { queryKey: getGetImapStatusQueryKey(), refetchInterval: 60_000 } });
-
-  const { data: smtp, isLoading: smtpLoading, refetch: refetchSmtp } = useQuery({
-    queryKey: ["smtp-status"],
+  const { data: accounts, isLoading: accountsLoading, refetch: refetchAccounts } = useQuery({
+    queryKey: ["mail-accounts"],
     queryFn: async () => {
-      const res = await fetch("/api/smtp/status");
-      if (!res.ok) throw new Error("Failed");
-      return res.json() as Promise<{ host: string; port: number; secure: boolean; email: string | null; fromName: string; configured: boolean }>;
+      const res = await fetch("/api/mail-accounts");
+      if (!res.ok) throw new Error("Failed to fetch accounts");
+      return res.json() as Promise<any[]>;
     },
   });
 
-  const configureImapMut = useConfigureImap();
+  const { data: statuses } = useQuery({
+    queryKey: ["mail-accounts-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/mail-accounts/status");
+      if (!res.ok) throw new Error("Failed to fetch statuses");
+      return res.json() as Promise<any[]>;
+    },
+    refetchInterval: 10_000,
+  });
 
-  const configureSmtpMut = useMutation({
-    mutationFn: async (payload: { email: string; password: string; fromName: string }) => {
-      const res = await fetch("/api/smtp/configure", {
+  function getStatusForAccount(id: number) {
+    return (statuses || []).find(s => s.id === id);
+  }
+
+  const configureAccountMut = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await fetch("/api/mail-accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: payload.email,
-          password: payload.password,
-          fromName: payload.fromName || "QuoteXtract",
-          host: "smtp.hostinger.com",
-          port: 465,
-          secure: true,
-        }),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("SMTP save failed");
+      if (!res.ok) throw new Error("Save failed");
       return res.json();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["mail-accounts"] }); }
+  });
+
+  const deleteAccountMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/mail-accounts/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mail-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["mail-accounts-status"] });
+      toast({ title: "Account removed", description: "Mail account has been disconnected." });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Delete failed", description: "Could not remove the account. Please try again." });
     },
   });
 
@@ -214,31 +246,42 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
+    if (!email || !password || !label) return;
     try {
-      await Promise.all([
-        configureImapMut.mutateAsync({ data: { email, password } }),
-        configureSmtpMut.mutateAsync({ email, password, fromName }),
-      ]);
-      toast({ title: "Credentials saved", description: "IMAP polling and SMTP sending are now active." });
+      await configureAccountMut.mutateAsync({
+        label,
+        email,
+        password,
+        imapHost: imapHost || `imap.${email.split('@')[1]}`,
+        imapPort,
+        smtpHost: smtpHost || `smtp.${email.split('@')[1]}`,
+        smtpPort,
+        fromName,
+      });
+      toast({ title: "Account connected", description: "IMAP polling and SMTP sending are now active for this account." });
       setPassword("");
+      setEmail("");
+      setLabel("");
+      setFromName("");
+      setImapHost(HOSTINGER_IMAP_HOST);
+      setSmtpHost(HOSTINGER_SMTP_HOST);
+      setImapPort(993);
+      setSmtpPort(465);
       setShowForm(false);
-      refetchImap();
-      refetchSmtp();
+      refetchAccounts();
     } catch {
-      toast({ variant: "destructive", title: "Save failed", description: "Could not save credentials. Check your email and password." });
+      toast({ variant: "destructive", title: "Connection failed", description: "Could not sync account. Check your email and password." });
     }
   };
 
-  const isPending = configureImapMut.isPending || configureSmtpMut.isPending;
-  const isAnyConfigured = imap?.enabled || smtp?.configured;
+  const isPending = configureAccountMut.isPending;
+  const isAnyConfigured = accounts && accounts.length > 0;
   const showCredentialForm = !isAnyConfigured || showForm;
 
-  const currentEmail = imap?.email || smtp?.email || "";
-
   return (
+    <TooltipProvider>
     <div className="space-y-8 max-w-4xl">
       {/* Page header */}
       <div className="space-y-1">
@@ -251,7 +294,7 @@ export default function SettingsPage() {
         <p className="text-muted-foreground text-sm pl-11">Configure integrations and application preferences.</p>
       </div>
 
-      {/* Unified email card */}
+      {/* Multi-Account Email Card */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
         <div className="h-1 w-full bg-gradient-to-r from-violet-500 via-blue-500 via-cyan-400 via-teal-400 to-emerald-500" />
 
@@ -262,149 +305,153 @@ export default function SettingsPage() {
               <Mail className="w-5 h-5 text-foreground" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-foreground">Hostinger Email Integration</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Shared credentials for incoming (IMAP) and outgoing (SMTP)</p>
+              <h2 className="text-base font-bold text-foreground">Mail Accounts</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Manage multiple connected mailboxes for incoming & outgoing sync</p>
             </div>
           </div>
-          {!showCredentialForm && currentEmail && (
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs font-mono text-muted-foreground hidden sm:block">{currentEmail}</span>
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-lg"
-                onClick={() => { setEmail(currentEmail); setPassword(""); setFromName(smtp?.fromName || ""); setShowForm(true); }}>
-                <KeyRound className="w-3 h-3" /> Change credentials
-              </Button>
+          {!showCredentialForm && (
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-lg"
+              onClick={() => { setEmail(""); setPassword(""); setLabel(""); setShowForm(true); }}>
+              <Plus className="w-3 h-3" /> Add account
+            </Button>
+          )}
+        </div>
+
+        <div className="px-6 py-5 border-b border-border">
+          {accountsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading accounts...
+            </div>
+          ) : accounts && accounts.length > 0 ? (
+            <div className="space-y-3">
+              {accounts.map((acc: any) => (
+                <div key={acc.id} className="flex items-center justify-between p-4 rounded-xl border border-border bg-muted/20">
+                   <div className="flex items-center gap-3">
+                     <div className="w-10 h-10 rounded-full border border-border/80 bg-background flex items-center justify-center shrink-0">
+                       <Mail className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                     </div>
+                     <div>
+                       <p className="font-semibold text-sm">{acc.label}</p>
+                       <p className="text-xs text-muted-foreground">{acc.email}</p>
+                     </div>
+                   </div>
+                   <div className="flex items-center gap-4">
+                     {(() => {
+                        const s = getStatusForAccount(acc.id);
+                        if (!s) return null;
+                        if (s.connected) {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-green-500/15 text-green-600 dark:text-green-400 border border-green-500/25">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Connected
+                            </span>
+                          );
+                        }
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/25 cursor-help">
+                                <AlertCircle className="w-3 h-3" /> Connection error
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              {s.lastError || "Check your credentials"}
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                     })()}
+                     <button
+                       type="button"
+                       disabled={deleteAccountMut.isPending}
+                       onClick={async () => {
+                         if (!window.confirm(`Remove "${acc.label}" (${acc.email})?`)) return;
+                         deleteAccountMut.mutate(acc.id);
+                       }}
+                       className="p-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-500 rounded-md transition-colors disabled:opacity-50"
+                     >
+                       {deleteAccountMut.isPending && deleteAccountMut.variables === acc.id
+                         ? <Loader2 className="w-4 h-4 animate-spin" />
+                         : <Trash2 className="w-4 h-4" />}
+                     </button>
+                   </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-6 flex flex-col items-center justify-center text-center">
+              <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-3">
+                <WifiOff className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground">No accounts connected</h3>
+              <p className="text-sm text-muted-foreground mt-1 max-w-sm">Connect a Google Workspace or Hostinger email to sync quotations automatically.</p>
             </div>
           )}
         </div>
 
-        {/* Shared credentials form */}
+        {/* Credentials Form */}
         {showCredentialForm && (
-          <div className="px-6 py-5 border-b border-border">
-            <form onSubmit={handleSave} className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Enter your Hostinger email credentials once — they will be applied to both incoming mail (IMAP) and outgoing mail (SMTP).
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="shared-email" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Email address</Label>
-                  <IconInput id="shared-email" icon={<User className="w-3.5 h-3.5" />} type="email"
-                    placeholder="you@yourdomain.com" value={email} onChange={setEmail} required autoComplete="email" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="shared-password" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Password</Label>
-                  <IconInput id="shared-password" icon={<Lock className="w-3.5 h-3.5" />} type="password"
-                    placeholder="Email password" value={password} onChange={setPassword} required autoComplete="current-password" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="shared-name" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Display name</Label>
-                  <IconInput id="shared-name" icon={<Tag className="w-3.5 h-3.5" />} type="text"
-                    placeholder="QuoteXtract" value={fromName} onChange={setFromName} autoComplete="name" />
-                </div>
+          <form onSubmit={handleSaveAccount} className="p-6 bg-muted/10 border-b border-border">
+            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2 text-foreground">
+              <KeyRound className="w-4 h-4 text-violet-500" /> Connect new account
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5 md:col-span-2">
+                <Label htmlFor="label" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide ml-1">Account Label</Label>
+                <IconInput id="label" icon={<Tag className="w-3.5 h-3.5" />} placeholder="e.g. Sales Team Inbox" value={label} onChange={setLabel} required />
               </div>
-
-              <div className="rounded-xl bg-muted/40 border border-border/60 px-4 py-3 flex flex-wrap gap-x-8 gap-y-1 items-center">
-                <div className="flex items-center gap-2">
-                  <ArrowDownToLine className="w-3.5 h-3.5 text-violet-500 shrink-0" />
-                  <span className="text-[11px] text-muted-foreground">IMAP: <span className="font-semibold text-foreground font-mono">imap.hostinger.com:993 (SSL)</span></span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <ArrowUpFromLine className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span className="text-[11px] text-muted-foreground">SMTP: <span className="font-semibold text-foreground font-mono">smtp.hostinger.com:465 (SSL/TLS)</span></span>
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide ml-1">Email address</Label>
+                <IconInput id="email" type="email" icon={<User className="w-3.5 h-3.5" />} placeholder="info@company.com" value={email} onChange={handleEmailChange} required autoComplete="email" />
               </div>
-
-              <div className="flex items-center gap-2">
-                <Button type="submit" size="sm" disabled={isPending || !email || !password}
-                  className="gap-1.5 bg-gradient-to-r from-violet-600 to-emerald-600 hover:from-violet-700 hover:to-emerald-700 text-white border-0">
-                  {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
-                  {isPending ? "Saving…" : "Save & Connect Both"}
-                </Button>
-                {showForm && (
-                  <Button variant="ghost" size="sm" type="button" onClick={() => setShowForm(false)}>Cancel</Button>
-                )}
+              <div className="space-y-1.5">
+                <Label htmlFor="password" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide ml-1">App Password</Label>
+                <IconInput id="password" type="password" icon={<Lock className="w-3.5 h-3.5" />} placeholder="••••••••••••••••" value={password} onChange={setPassword} required autoComplete="current-password" />
               </div>
-            </form>
-          </div>
-        )}
-
-        {/* Status panels — only shown when configured */}
-        {!showCredentialForm && (
-          <div className="flex divide-x divide-border">
-            {/* IMAP status */}
-            <div className="flex-1 p-6 space-y-4 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                    <ArrowDownToLine className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+              <div className="space-y-1.5 md:col-span-2">
+                <Label htmlFor="fromName" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide ml-1">Sender Display Name (Optional)</Label>
+                <IconInput id="fromName" icon={<User className="w-3.5 h-3.5" />} placeholder="e.g. John Doe" value={fromName} onChange={setFromName} />
+              </div>
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-l-2 border-violet-500 pl-2 flex items-center gap-2">
+                    Incoming (IMAP)
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-500 border border-violet-500/20 normal-case tracking-normal">Hostinger</span>
+                  </h4>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="imapHost" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide ml-1">IMAP Host</Label>
+                    <IconInput id="imapHost" icon={<Server className="w-3.5 h-3.5" />} placeholder="imap.hostinger.com" value={imapHost} onChange={setImapHost} />
                   </div>
-                  <p className="text-sm font-bold text-foreground">Incoming (IMAP)</p>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="imapPort" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide ml-1">IMAP Port</Label>
+                    <Input id="imapPort" type="number" value={imapPort} onChange={e => setImapPort(parseInt(e.target.value))} className="text-sm" />
+                  </div>
                 </div>
-                <StatusPill loading={imapLoading} connected={!!(imap?.enabled && imap?.connected)} configured={!!(imap?.enabled && !imap?.connected)} />
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-l-2 border-blue-500 pl-2 flex items-center gap-2">
+                    Outgoing (SMTP)
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20 normal-case tracking-normal">Hostinger</span>
+                  </h4>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="smtpHost" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide ml-1">SMTP Host</Label>
+                    <IconInput id="smtpHost" icon={<Send className="w-3.5 h-3.5" />} placeholder="smtp.hostinger.com" value={smtpHost} onChange={setSmtpHost} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="smtpPort" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide ml-1">SMTP Port</Label>
+                    <Input id="smtpPort" type="number" value={smtpPort} onChange={e => setSmtpPort(parseInt(e.target.value))} className="text-sm" />
+                  </div>
+                </div>
               </div>
+            </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <StatPill
-                  icon={imap?.connected ? <Wifi className="w-3.5 h-3.5 text-green-500" /> : <WifiOff className="w-3.5 h-3.5 text-red-500" />}
-                  label="Status" value={imap?.connected ? "Connected" : "Error"}
-                  valueClass={imap?.connected ? "text-green-600 dark:text-green-400" : "text-red-500"}
-                />
-                <StatPill icon={<Clock className="w-3.5 h-3.5" />} label="Poll interval" value={`${imap?.pollIntervalSeconds ?? 60}s`} />
-                <StatPill icon={<Server className="w-3.5 h-3.5" />} label="Server" value={`${imap?.host ?? "imap.hostinger.com"}:${imap?.port ?? 993}`} mono />
-                <StatPill icon={<Shield className="w-3.5 h-3.5" />} label="Encryption" value="SSL" />
-              </div>
-
-              {imap?.lastCheck && (
-                <p className="text-[11px] text-muted-foreground">
-                  Last checked: <span className="font-semibold text-foreground">{formatDistanceToNow(new Date(imap.lastCheck), { addSuffix: true })}</span>
-                  <span className="mx-1.5 opacity-40">·</span>{format(new Date(imap.lastCheck), "HH:mm:ss")}
-                </p>
+            <div className="flex items-center justify-end gap-3 mt-6">
+              {accounts && accounts.length > 0 && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
               )}
-
-              {imap?.lastError && (
-                <div className="flex items-start gap-2 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2 text-xs text-red-700 dark:text-red-300">
-                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" /><span>{imap.lastError}</span>
-                </div>
-              )}
-
-              {imap?.connected && (
-                <div className="flex items-start gap-2 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-3 py-2 text-xs text-green-700 dark:text-green-300">
-                  <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>Polling active — new PDFs are auto-extracted every {imap.pollIntervalSeconds}s.</span>
-                </div>
-              )}
-
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-lg" onClick={() => refetchImap()} disabled={imapFetching}>
-                <RefreshCw className={`w-3 h-3 ${imapFetching ? "animate-spin" : ""}`} /> Refresh status
+              <Button type="submit" size="sm" disabled={isPending} className="gap-2 shrink-0 bg-violet-600 hover:bg-violet-700 text-white">
+                {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+                Connect Account
               </Button>
             </div>
-
-            {/* SMTP status */}
-            <div className="flex-1 p-6 space-y-4 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                    <ArrowUpFromLine className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <p className="text-sm font-bold text-foreground">Outgoing (SMTP)</p>
-                </div>
-                <StatusPill loading={smtpLoading} configured={!!smtp?.configured} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <StatPill icon={<Mail className="w-3.5 h-3.5" />} label="Account" value={smtp?.email || "—"} mono />
-                <StatPill icon={<Shield className="w-3.5 h-3.5" />} label="Encryption" value={smtp?.secure ? "SSL/TLS" : "STARTTLS"} />
-                <StatPill icon={<Server className="w-3.5 h-3.5" />} label="Server" value={`${smtp?.host ?? "smtp.hostinger.com"}:${smtp?.port ?? 465}`} mono />
-                <StatPill icon={<Send className="w-3.5 h-3.5" />} label="From name" value={smtp?.fromName || "QuoteXtract"} />
-              </div>
-
-              {smtp?.configured && (
-                <div className="flex items-start gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
-                  <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>Ready — use the Compose button in the Mail page to send emails.</span>
-                </div>
-              )}
-            </div>
-          </div>
+          </form>
         )}
       </div>
 
@@ -566,5 +613,6 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 }

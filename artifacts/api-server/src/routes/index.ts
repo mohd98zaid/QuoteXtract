@@ -7,6 +7,7 @@ import quotationsRouter from "./quotations";
 import analyticsRouter from "./analytics";
 import webhookRouter from "./webhook";
 import mailRouter from "./mail";
+import mailAccountsRouter from "./mail-accounts";
 import smtpRouter from "./smtp";
 import assistantRouter from "./assistant";
 
@@ -20,6 +21,7 @@ router.use(quotationsRouter);
 router.use(analyticsRouter);
 router.use(webhookRouter);
 router.use(mailRouter);
+router.use(mailAccountsRouter);
 router.use(smtpRouter);
 router.use("/assistant", assistantRouter);
 

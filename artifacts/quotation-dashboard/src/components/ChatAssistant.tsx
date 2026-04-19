@@ -1,8 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Bot, X, Send, User, ChevronDown, Minimize2 } from "lucide-react";
+import { Bot, X, Send, User, ChevronDown, Minimize2, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Link } from "wouter";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -139,11 +142,55 @@ export function ChatAssistant() {
                     className={cn(
                       "px-4 py-2.5 rounded-2xl",
                       msg.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-tr-sm"
-                        : "bg-muted text-foreground border border-border/50 rounded-tl-sm whitespace-pre-wrap"
+                        ? "bg-primary text-primary-foreground rounded-tr-sm shadow-md"
+                        : "bg-muted text-foreground border border-border/50 rounded-tl-sm shadow-sm"
                     )}
                   >
-                    {msg.content}
+                    {msg.role === "user" ? (
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    ) : (
+                      <div className="prose prose-sm dark:prose-invert max-w-none break-words leading-relaxed">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            a: ({ href, children }) => {
+                              const isExternal = href?.startsWith("http");
+                              const content = (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/10 text-primary font-semibold hover:bg-primary/20 transition-colors border border-primary/20 my-1 cursor-pointer">
+                                  {children}
+                                  {isExternal ? <ExternalLink className="w-3 h-3" /> : null}
+                                </span>
+                              );
+
+                              if (isExternal) {
+                                return (
+                                  <a href={href} target="_blank" rel="noopener noreferrer" className="no-underline">
+                                    {content}
+                                  </a>
+                                );
+                              }
+
+                              return (
+                                <Link href={href || "#"} className="no-underline">
+                                  {content}
+                                </Link>
+                              );
+                            },
+                            p: ({ children }) => <p className="m-0 mb-2 last:mb-0">{children}</p>,
+                            ul: ({ children }) => <ul className="m-0 mb-2 pl-4 list-disc">{children}</ul>,
+                            ol: ({ children }) => <ol className="m-0 mb-2 pl-4 list-decimal">{children}</ol>,
+                            li: ({ children }) => <li className="mb-0.5">{children}</li>,
+                            code: ({ children }) => (
+                              <code className="px-1.5 py-0.5 rounded bg-muted-foreground/10 font-mono text-[0.85em]">
+                                {children}
+                              </code>
+                            ),
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

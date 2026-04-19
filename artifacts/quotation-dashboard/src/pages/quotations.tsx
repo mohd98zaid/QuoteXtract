@@ -249,7 +249,7 @@ export default function QuotationsList() {
           </Button>
 
           <Button onClick={() => { setNewForm({ ...EMPTY_QUOTATION }); setShowNewDialog(true); }}>
-            <Plus className="w-4 h-4 mr-2" /> New Quotation
+            <Plus className="w-4 h-4 mr-2" /> Add Quotation
           </Button>
 
           <input

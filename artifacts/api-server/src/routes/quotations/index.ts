@@ -18,8 +18,32 @@ import { extractFromPdf } from "../../lib/pdf-extractor";
 import multer from "multer";
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
+import path from "path";
+import fs from "fs";
 
 const upload = multer({ storage: multer.memoryStorage() });
+
+// Storage for outbound quotation PDFs (same folder as email PDFs)
+const pdfUploadDir = "/tmp/quotation-pdfs";
+if (!fs.existsSync(pdfUploadDir)) {
+  fs.mkdirSync(pdfUploadDir, { recursive: true });
+}
+
+const quotationPdfUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, pdfUploadDir),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const ext = path.extname(file.originalname) || ".pdf";
+      cb(null, `${uniqueSuffix}${ext}`);
+    },
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === "application/pdf") cb(null, true);
+    else cb(new Error("Only PDF files are allowed"));
+  },
+});
 
 const router: IRouter = Router();
 
@@ -224,6 +248,47 @@ router.post("/quotations/import", upload.single("file"), async (req, res): Promi
     req.log.error({ err }, "Failed to import quotations from CSV");
     res.status(500).json({ error: err.message || "Import failed" });
   }
+});
+
+// Attach a generated PDF to a manually-created quotation
+router.post("/quotations/:id/attach-pdf", quotationPdfUpload.single("file"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id", code: "VALIDATION_ERROR" });
+    return;
+  }
+
+  if (!req.file) {
+    res.status(400).json({ error: "No file uploaded", code: "NO_FILE" });
+    return;
+  }
+
+  const [quotation] = await db.select().from(quotationsTable).where(eq(quotationsTable.id, id));
+  if (!quotation) {
+    // Clean up uploaded file
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    res.status(404).json({ error: "Quotation not found", code: "NOT_FOUND" });
+    return;
+  }
+
+  // Delete the old PDF file if it exists and is different
+  if (quotation.pdfStorageKey && quotation.pdfStorageKey !== req.file.filename) {
+    const oldPath = path.join(pdfUploadDir, quotation.pdfStorageKey);
+    await fs.promises.unlink(oldPath).catch(() => {});
+  }
+
+  const storageKey = req.file.filename;
+
+  const [updated] = await db
+    .update(quotationsTable)
+    .set({ pdfStorageKey: storageKey })
+    .where(eq(quotationsTable.id, id))
+    .returning();
+
+  await logEvent(id, "updated", quotation.pdfStorageKey, storageKey, "PDF attached");
+
+  req.log.info({ quotationId: id, storageKey }, "PDF attached to quotation");
+  res.json({ id: updated.id, pdfStorageKey: storageKey, url: `/api/pdfs/${storageKey}` });
 });
 
 // Get single quotation with items

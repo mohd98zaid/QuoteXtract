@@ -108,27 +108,28 @@ export interface MailAttachment {
 }
 
 export async function sendMail(opts: {
+  accountId: number;
   to: string;
   cc?: string;
   subject: string;
   text: string;
-  fromEmail?: string;
   fromName?: string;
   attachments?: MailAttachment[];
 }): Promise<void> {
-  const email = await getSetting("smtp_email");
-  const password = await getSetting("smtp_password");
-  const host = (await getSetting("smtp_host")) || "smtp.hostinger.com";
-  const port = Number((await getSetting("smtp_port")) || 465);
-  const secure = (await getSetting("smtp_secure")) !== "false";
-  const defaultFromName = (await getSetting("smtp_from_name")) || "QuoteXtract";
+  const { mailAccountsTable } = await import("@workspace/db");
+  const [account] = await db.select().from(mailAccountsTable).where(eq(mailAccountsTable.id, opts.accountId)).limit(1);
 
-  if (!email || !password) {
-    throw new Error("SMTP not configured. Please add your credentials in Settings.");
+  if (!account) {
+    throw new Error("SMTP account not found. Please add your credentials in Settings.");
   }
 
-  const resolvedFromEmail = opts.fromEmail || email;
-  const resolvedFromName = opts.fromName || defaultFromName;
+  const host = account.smtpHost;
+  const port = account.smtpPort;
+  const secure = account.secure;
+  const email = account.email;
+  const password = account.password;
+
+  const resolvedFromName = opts.fromName || account.fromName || "QuoteXtract";
 
   const transporter = nodemailer.createTransport({
     host,
@@ -138,7 +139,7 @@ export async function sendMail(opts: {
   });
 
   await transporter.sendMail({
-    from: `"${resolvedFromName}" <${resolvedFromEmail}>`,
+    from: `"${resolvedFromName}" <${email}>`,
     to: opts.to,
     cc: opts.cc || undefined,
     subject: opts.subject,
@@ -150,5 +151,5 @@ export async function sendMail(opts: {
     })),
   });
 
-  logger.info({ to: opts.to, from: resolvedFromEmail, subject: opts.subject }, "Email sent via SMTP");
+  logger.info({ to: opts.to, from: email, subject: opts.subject }, "Email sent via SMTP");
 }

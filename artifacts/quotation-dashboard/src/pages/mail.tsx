@@ -23,17 +23,17 @@ import {
   AlertCircle,
   X,
   Maximize2,
+  Minimize2,
   Printer,
   Tag,
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  Mail,
 } from "lucide-react";
 import {
-  useListMail,
   useGetMail,
   useTrackMailPdf,
-  getListMailQueryKey,
   getGetMailQueryKey,
   type MailItem,
 } from "@workspace/api-client-react";
@@ -43,6 +43,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -290,8 +291,8 @@ function EmailRow({ mail, selected, starred, onClick, onStar, onTrack, isTrackin
 
         <p
           className={cn(
-            "text-xs truncate mb-1",
-            isUnread ? "font-medium text-foreground" : "text-muted-foreground",
+            "text-base font-semibold truncate mb-0.5",
+            isUnread ? "text-foreground" : "text-muted-foreground/90",
           )}
         >
           {mail.subject || "(no subject)"}
@@ -310,7 +311,7 @@ function EmailRow({ mail, selected, starred, onClick, onStar, onTrack, isTrackin
                     onClick={(e) => { e.stopPropagation(); onTrack(mail.id); }}
                     disabled={isTracking}
                     className={cn(
-                      "hidden group-hover:flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-md transition-colors",
+                      "flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-md transition-all shadow-sm",
                       "bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-60"
                     )}
                   >
@@ -613,19 +614,46 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
                     </Button>
                   </div>
                 ) : (
-                  <Button
-                    size="sm"
-                    className="h-9 text-sm gap-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold"
-                    onClick={() => onTrack(detail.id)}
-                    disabled={tracking}
-                  >
-                    {tracking ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <BarChart2 className="w-4 h-4" />
-                    )}
-                    {tracking ? "Extracting…" : "Track PDF"}
-                  </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* View PDF */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-9 text-xs gap-1.5"
+                          asChild
+                        >
+                          <a
+                            href={`/api/pdfs/${detail.pdfStorageKey}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                            </svg>
+                            View PDF
+                          </a>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">Open PDF in a new tab</TooltipContent>
+                    </Tooltip>
+
+                    {/* Track PDF */}
+                    <Button
+                      size="sm"
+                      className="h-9 text-sm gap-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold"
+                      onClick={() => onTrack(detail.id)}
+                      disabled={tracking}
+                    >
+                      {tracking ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <BarChart2 className="w-4 h-4" />
+                      )}
+                      {tracking ? "Extracting…" : "Track PDF"}
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>
@@ -658,7 +686,7 @@ function ReadingPane({ mailId, onTrack, tracking }: ReadingPaneProps) {
           onClose={() => setComposeData(null)}
           onSent={() => {
             setComposeData(null);
-            queryClient.invalidateQueries({ queryKey: getListMailQueryKey({ source: "sent" }) });
+            queryClient.invalidateQueries({ queryKey: ["mail-list", "sent"] });
           }}
         />
       )}
@@ -686,7 +714,12 @@ interface ComposeDialogProps {
   initialSubject?: string;
   initialBody?: string;
 }
-interface FromOption { email: string; name: string; label: string; }
+interface FromOption {
+  id: number;
+  email: string;
+  name: string;
+  label: string;
+}
 
 function ComposeDialog({
   onClose, onSent,
@@ -705,33 +738,25 @@ function ComposeDialog({
   const [fromDropdownOpen, setFromDropdownOpen] = useState(false);
   const [selectedFrom, setSelectedFrom] = useState<FromOption | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [isFullPage, setIsFullPage] = useState(false);
   const [enhancing, setEnhancing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: smtpStatus } = useQuery({
-    queryKey: ["smtp-status"],
+  const { data: accountsData } = useQuery({
+    queryKey: ["mail-accounts"],
     queryFn: async () => {
-      const res = await fetch("/api/smtp/status");
-      return res.json() as Promise<{ email: string | null; fromName: string; configured: boolean }>;
+      const res = await fetch("/api/mail-accounts");
+      return res.json() as Promise<{ id: number; email: string; fromName?: string | null; label: string }[]>;
     },
     staleTime: 60_000,
   });
 
-  const { data: aliasesData } = useQuery({
-    queryKey: ["smtp-aliases"],
-    queryFn: async () => {
-      const res = await fetch("/api/smtp/aliases");
-      return res.json() as Promise<{ aliases: { email: string; name: string }[] }>;
-    },
-    staleTime: 30_000,
-  });
-
-  const fromOptions: FromOption[] = smtpStatus?.email
-    ? [
-        { email: smtpStatus.email, name: smtpStatus.fromName || "QuoteXtract", label: `${smtpStatus.fromName || "QuoteXtract"} <${smtpStatus.email}>` },
-        ...(aliasesData?.aliases ?? []).map((a) => ({ email: a.email, name: a.name, label: `${a.name} <${a.email}>` })),
-      ]
-    : [];
+  const fromOptions: FromOption[] = (accountsData ?? []).map((acc) => ({
+    id: acc.id,
+    email: acc.email,
+    name: acc.fromName || acc.label || "QuoteXtract",
+    label: `${acc.fromName || acc.label || "QuoteXtract"} <${acc.email}>`,
+  }));
 
   const activeFrom = selectedFrom ?? fromOptions[0] ?? null;
   const hasMultipleFrom = fromOptions.length > 1;
@@ -759,14 +784,18 @@ function ComposeDialog({
       toast({ variant: "destructive", title: "Missing fields", description: "Please fill in To, Subject, and message body." });
       return;
     }
+    if (!activeFrom?.id) {
+      toast({ variant: "destructive", title: "No account selected", description: "Please connect an email account to send messages." });
+      return;
+    }
     setSending(true);
     try {
       const formData = new FormData();
+      formData.append("accountId", activeFrom.id.toString());
       formData.append("to", to.trim());
       if (cc.trim()) formData.append("cc", cc.trim());
       formData.append("subject", subject.trim());
       formData.append("text", body.trim());
-      if (activeFrom?.email) formData.append("fromEmail", activeFrom.email);
       if (activeFrom?.name) formData.append("fromName", activeFrom.name);
       attachments.forEach((file) => formData.append("attachments", file));
 
@@ -787,17 +816,46 @@ function ComposeDialog({
       toast({ title: "Draft is empty", description: "Type a rough idea of what you want to say first!" });
       return;
     }
+
     setEnhancing(true);
     try {
+      // Split body by common separators to avoid AI rewriting history
+      const separators = ["--- Original message ---", "--- Forwarded message ---"];
+      let userDraft = body;
+      let quotedHistory = "";
+
+      for (const sep of separators) {
+        if (body.includes(sep)) {
+          const parts = body.split(sep);
+          userDraft = parts[0];
+          quotedHistory = sep + parts.slice(1).join(sep);
+          break;
+        }
+      }
+
+      if (!userDraft.trim()) {
+        toast({ title: "No new content", description: "You haven't typed anything new yet!" });
+        setEnhancing(false);
+        return;
+      }
+
       const res = await fetch("/api/mail/enhance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ draftText: body, originalText: initialBody }),
+        body: JSON.stringify({ 
+          draftText: userDraft.trim(), 
+          originalText: quotedHistory || initialBody 
+        }),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to elevate draft");
-      setBody(data.enhanced);
-      toast({ title: "Draft enhanced ✨", description: "AI has rewritten your message." });
+      
+      // Merge enhanced draft back with history
+      const finalBody = quotedHistory ? `${data.enhanced}\n\n${quotedHistory}` : data.enhanced;
+      setBody(finalBody);
+      
+      toast({ title: "Draft enhanced ✨", description: "AI has rewritten your response." });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Enhancement failed";
       toast({ variant: "destructive", title: "AI Error", description: msg });
@@ -807,30 +865,54 @@ function ComposeDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-end p-6 pointer-events-none">
-      <div className="w-[520px] bg-card border border-border rounded-xl shadow-2xl flex flex-col pointer-events-auto max-h-[640px]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-[#1B1F3B] rounded-t-xl shrink-0">
-          <span className="text-sm font-semibold text-white">{title}</span>
-          <button type="button" onClick={onClose} className="text-white/60 hover:text-white transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+    <div className={cn(
+      "fixed inset-0 z-50 flex p-6 pointer-events-none transition-all duration-300",
+      isFullPage ? "items-center justify-center bg-black/40 backdrop-blur-[2px]" : "items-end justify-end"
+    )}>
+      <div
+        className={cn(
+          "bg-[#1c1f2e] border border-white/10 rounded-2xl shadow-[0_24px_80px_rgba(0,0,0,0.6)] flex flex-col pointer-events-auto transition-all duration-300",
+          isFullPage ? "w-full h-full max-w-[1240px] max-h-[900px]" : "w-[580px]"
+        )}
+        style={!isFullPage ? { maxHeight: "min(700px, calc(100vh - 48px))" } : {}}
+      >
+        {/* ── Title bar ───────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-5 py-3.5 bg-[#161929] rounded-t-2xl shrink-0 border-b border-white/8">
+          <span className="text-sm font-semibold text-white tracking-wide">{title}</span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setIsFullPage(!isFullPage)}
+              className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-all"
+              title={isFullPage ? "Exit full page" : "Expand to full page"}
+            >
+              {isFullPage ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-all"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
-        {/* Fields */}
-        <div className="divide-y divide-border shrink-0">
+
+        {/* ── Recipient fields ─────────────────────────────────────────────── */}
+        <div className="shrink-0 border-b border-white/6 divide-y divide-white/6">
           {/* From */}
           {fromOptions.length > 0 && (
-            <div className="flex items-center gap-2 px-4 py-2.5">
-              <span className="text-xs text-muted-foreground w-12 shrink-0">From</span>
+            <div className="flex items-center px-5 py-2.5 group">
+              <span className="text-[11px] font-medium text-white/35 w-14 shrink-0 uppercase tracking-wider">From</span>
               {hasMultipleFrom ? (
                 <DropdownMenu open={fromDropdownOpen} onOpenChange={setFromDropdownOpen}>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="flex-1 flex items-center justify-between h-7 text-sm text-foreground bg-transparent hover:bg-muted/50 rounded px-1.5 transition-colors"
+                      className="flex-1 flex items-center justify-between text-sm text-white/80 bg-transparent hover:text-white transition-colors outline-none"
                     >
                       <span className="truncate">{activeFrom?.label ?? "Select sender…"}</span>
-                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-1" />
+                      <ChevronDown className="w-3.5 h-3.5 text-white/30 shrink-0 ml-1" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-[400px]">
@@ -840,63 +922,74 @@ function ComposeDialog({
                         onClick={() => { setSelectedFrom(opt); setFromDropdownOpen(false); }}
                         className={cn(activeFrom?.email === opt.email && "bg-accent")}
                       >
-                        <Send className="w-3.5 h-3.5 mr-2 text-violet-500 shrink-0" />
+                        <Send className="w-3.5 h-3.5 mr-2 text-violet-400 shrink-0" />
                         <span className="truncate">{opt.label}</span>
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                <span className="text-sm text-foreground truncate">{activeFrom?.label}</span>
+                <span className="text-sm text-white/70 truncate">{activeFrom?.label}</span>
               )}
             </div>
           )}
-          <div className="flex items-center gap-2 px-4 py-2.5">
-            <span className="text-xs text-muted-foreground w-12 shrink-0">To</span>
+
+          {/* To */}
+          <div className="flex items-center px-5 py-2.5 focus-within:bg-white/[0.03] transition-colors">
+            <span className="text-[11px] font-medium text-white/35 w-14 shrink-0 uppercase tracking-wider">To</span>
             <input
-              className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+              className="flex-1 text-sm bg-transparent outline-none text-white placeholder:text-white/25 caret-violet-400"
               placeholder="recipient@example.com"
               value={to}
               onChange={(e) => setTo(e.target.value)}
               autoFocus
             />
           </div>
-          <div className="flex items-center gap-2 px-4 py-2.5">
-            <span className="text-xs text-muted-foreground w-12 shrink-0">Cc</span>
+
+          {/* Cc */}
+          <div className="flex items-center px-5 py-2.5 focus-within:bg-white/[0.03] transition-colors">
+            <span className="text-[11px] font-medium text-white/35 w-14 shrink-0 uppercase tracking-wider">Cc</span>
             <input
-              className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+              className="flex-1 text-sm bg-transparent outline-none text-white placeholder:text-white/25 caret-violet-400"
               placeholder="optional"
               value={cc}
               onChange={(e) => setCc(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2 px-4 py-2.5">
-            <span className="text-xs text-muted-foreground w-12 shrink-0">Subject</span>
+
+          {/* Subject — visually distinct */}
+          <div className="flex items-center px-5 py-3 focus-within:bg-white/[0.03] transition-colors">
+            <span className="text-[11px] font-medium text-white/35 w-14 shrink-0 uppercase tracking-wider">Subject</span>
             <input
-              className="flex-1 h-7 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+              className="flex-1 text-sm font-semibold bg-transparent outline-none text-white placeholder:text-white/20 caret-violet-400"
               placeholder="Subject line"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
             />
           </div>
         </div>
-        {/* Body */}
+
+        {/* ── Body ────────────────────────────────────────────────────────── */}
         <textarea
-          className="flex-1 resize-none px-4 py-3 text-sm bg-transparent outline-none min-h-[160px] text-foreground placeholder:text-muted-foreground"
+          className="flex-1 resize-none px-5 py-4 text-sm bg-transparent outline-none text-white/85 placeholder:text-white/20 leading-relaxed caret-violet-400 min-h-[180px]"
           placeholder="Write your message…"
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
 
-        {/* Attachments list */}
+        {/* ── Attachments ─────────────────────────────────────────────────── */}
         {attachments.length > 0 && (
-          <div className="px-4 pb-2 flex flex-wrap gap-1.5 border-t border-border pt-2 shrink-0">
+          <div className="px-5 pb-3 flex flex-wrap gap-1.5 border-t border-white/8 pt-2.5 shrink-0">
             {attachments.map((file, i) => (
-              <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted border border-border text-xs max-w-[220px]">
-                <Paperclip className="w-3 h-3 text-muted-foreground shrink-0" />
-                <span className="truncate text-foreground font-medium">{file.name}</span>
-                <span className="text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
-                <button type="button" onClick={() => removeAttachment(i)} className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors shrink-0">
+              <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/8 border border-white/10 text-xs max-w-[220px]">
+                <Paperclip className="w-3 h-3 text-white/40 shrink-0" />
+                <span className="truncate text-white/80 font-medium">{file.name}</span>
+                <span className="text-white/35 shrink-0">{formatFileSize(file.size)}</span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(i)}
+                  className="ml-0.5 text-white/30 hover:text-red-400 transition-colors shrink-0"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </div>
@@ -904,55 +997,70 @@ function ComposeDialog({
           </div>
         )}
 
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={handleFileSelect}
-        />
+        <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border shrink-0">
-          <div className="flex items-center gap-2">
+        {/* ── Footer toolbar ───────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-white/8 shrink-0 rounded-b-2xl bg-[#161929]">
+          <div className="flex items-center gap-1.5">
+            {/* Send */}
             <Button
               size="sm"
-              className="bg-violet-600 hover:bg-violet-700 text-white gap-2"
+              className="bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white gap-2 px-4 h-8 rounded-xl font-medium shadow-lg shadow-violet-900/40 transition-all"
               onClick={handleSend}
               disabled={sending}
             >
               {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
               {sending ? "Sending…" : "Send"}
             </Button>
+
+            {/* Separator */}
+            <div className="w-px h-5 bg-white/10 mx-1" />
+
+            {/* AI Enhance */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="gap-1.5 border-violet-500/30 text-violet-600 hover:bg-violet-50 hover:text-violet-700 dark:text-violet-400 dark:border-violet-400/30 dark:hover:bg-violet-500/20 px-2"
+                  variant="ghost"
+                  className="gap-1.5 h-8 px-3 rounded-xl text-violet-400 hover:text-violet-300 hover:bg-violet-500/15 border border-violet-500/20 hover:border-violet-400/40 transition-all"
                   onClick={handleEnhance}
                   disabled={enhancing || sending}
                 >
-                  {enhancing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                  <span className="hidden sm:inline">{enhancing ? "✨ Writing..." : "✨ AI Enhance"}</span>
+                  {enhancing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  <span className="hidden sm:inline text-xs">{enhancing ? "Writing…" : "AI Enhance"}</span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">Rewrite my draft politely</TooltipContent>
+              <TooltipContent side="top" className="text-xs">Rewrite my draft with AI</TooltipContent>
             </Tooltip>
-            <div className="w-px h-5 bg-border mx-0.5" />
-            <button
-              type="button"
-              title="Attach files"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            >
-              <Paperclip className="w-4 h-4" />
-            </button>
+
+            {/* Attach */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-2 rounded-xl text-white/40 hover:text-white/80 hover:bg-white/8 transition-all"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">Attach files</TooltipContent>
+            </Tooltip>
           </div>
-          <button type="button" className="text-muted-foreground hover:text-destructive transition-colors" onClick={onClose}>
-            <Trash2 className="w-4 h-4" />
-          </button>
+
+          {/* Discard */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-2 rounded-xl text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">Discard</TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </div>
@@ -979,14 +1087,74 @@ export default function MailPage() {
     localStorage.setItem("mail_sidebar_collapsed", String(value));
   };
 
-  const { data: mails, isLoading, refetch } = useListMail({
-    query: { refetchInterval: 60_000, queryKey: getListMailQueryKey() },
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("all");
+
+  const { data: accounts } = useQuery({
+    queryKey: ["mail-accounts"],
+    queryFn: async () => {
+      const res = await fetch("/api/mail-accounts");
+      if (!res.ok) throw new Error("Failed to fetch accounts");
+      return res.json() as Promise<{ id: number; label: string; email: string }[]>;
+    },
   });
 
-  const { data: sentMails, refetch: refetchSent } = useListMail({
-    params: { source: "sent" },
-    query: { refetchInterval: 60_000, queryKey: getListMailQueryKey({ source: "sent" }) },
+  const { data: mails, isLoading, refetch } = useQuery({
+    queryKey: ["mail-list", "imap", selectedAccountId],
+    queryFn: async () => {
+      let url = "/api/mail";
+      if (selectedAccountId !== "all") {
+        url += `?accountId=${selectedAccountId}`;
+      }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Fetch failed");
+      return res.json() as Promise<MailItem[]>;
+    },
+    refetchInterval: 60_000,
   });
+
+  const { data: sentMails, refetch: refetchSent } = useQuery({
+    queryKey: ["mail-list", "sent", selectedAccountId],
+    queryFn: async () => {
+      let url = "/api/mail?source=sent";
+      if (selectedAccountId !== "all") {
+        url += `&accountId=${selectedAccountId}`;
+      }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Fetch failed");
+      return res.json() as Promise<MailItem[]>;
+    },
+    refetchInterval: 60_000,
+  });
+
+  // ── Derivations ─────────────────────────────────────────────────────────────
+  const unread = (mails ?? []).filter((m) => !m.isRead).length;
+  const starredCount = (mails ?? []).filter((m) => starredIds.has(m.id)).length;
+  const sentCount = (sentMails ?? []).length;
+
+  const folderMails = (() => {
+    switch (activeFolder) {
+      case "Inbox": return mails || [];
+      case "Starred": return (mails || []).filter((m) => starredIds.has(m.id));
+      case "Sent": return sentMails || [];
+      default: return [];
+    }
+  })();
+
+  const filtered = folderMails.filter((m) => {
+    if (!m) return false;
+    const q = search.toLowerCase();
+    return (
+      m.subject?.toLowerCase().includes(q) ||
+      m.senderName?.toLowerCase().includes(q) ||
+      m.senderEmail?.toLowerCase().includes(q) ||
+      m.recipientEmail?.toLowerCase().includes(q) ||
+      m.bodyText?.toLowerCase().includes(q)
+    );
+  });
+
+  const emptyState = FOLDER_EMPTY[activeFolder] || FOLDER_EMPTY.Inbox;
+  const EmptyIcon = emptyState.icon;
+
 
   const fetchNowMut = useMutation({
     mutationFn: async () => {
@@ -996,7 +1164,7 @@ export default function MailPage() {
     },
     onSuccess: () => {
       setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: getListMailQueryKey() });
+        queryClient.invalidateQueries({ queryKey: ["mail-list"] });
         refetch();
       }, 3000);
       toast({ title: "Fetching mail…", description: "New emails will appear in a few seconds." });
@@ -1015,7 +1183,7 @@ export default function MailPage() {
         toast({ title: "Already tracked", description: "This PDF is already in your quotations." });
       } else {
         toast({ title: "PDF tracked!", description: "Quotation created and added to your dashboard." });
-        queryClient.invalidateQueries({ queryKey: getListMailQueryKey() });
+        queryClient.invalidateQueries({ queryKey: ["mail-list"] });
         queryClient.invalidateQueries({ queryKey: getGetMailQueryKey(mailId) });
       }
       setLocation(`/quotations/${result.quotationId}`);
@@ -1028,7 +1196,7 @@ export default function MailPage() {
     setTrackingRowId(mailId);
     try {
       const result = await trackMut.mutateAsync({ id: mailId });
-      queryClient.invalidateQueries({ queryKey: getListMailQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["mail-list"] });
       if (result.alreadyTracked) {
         toast({ title: "Already tracked", description: "This PDF is already in your quotations." });
       } else {
@@ -1047,7 +1215,6 @@ export default function MailPage() {
 
   const handleSelectMail = (id: number) => {
     setSelectedId(id);
-    queryClient.invalidateQueries({ queryKey: getListMailQueryKey() });
   };
 
   const handleStar = (id: number) => {
@@ -1065,37 +1232,7 @@ export default function MailPage() {
     setSearch("");
   };
 
-  const allMails = mails || [];
-  const unread = allMails.filter((m) => !m.isRead).length;
-  const starredCount = starredIds.size;
 
-  // Filter by folder first, then search
-  const folderMails = (() => {
-    switch (activeFolder) {
-      case "Inbox": return allMails;
-      case "Starred": return allMails.filter((m) => starredIds.has(m.id));
-      case "Sent": return sentMails || [];
-      case "Drafts":
-      case "Spam":
-      case "Trash":
-        return [];
-    }
-  })();
-
-  const filtered = folderMails.filter((m) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      m.subject?.toLowerCase().includes(q) ||
-      m.senderName?.toLowerCase().includes(q) ||
-      m.senderEmail?.toLowerCase().includes(q) ||
-      m.recipientEmail?.toLowerCase().includes(q) ||
-      m.bodyText?.toLowerCase().includes(q)
-    );
-  });
-
-  const emptyState = FOLDER_EMPTY[activeFolder];
-  const EmptyIcon = emptyState.icon;
 
   return (
     <div className="flex h-full overflow-hidden bg-background border border-border">
@@ -1119,13 +1256,39 @@ export default function MailPage() {
       {/* ── Email list ──────────────────────── */}
       <div className="w-80 shrink-0 border-x border-border flex flex-col min-h-0 bg-background">
         {/* List header */}
-        <div className="px-4 py-3 border-b border-border shrink-0 space-y-2">
+        <div className="px-4 py-3 border-b border-border shrink-0 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-foreground">{activeFolder}</span>
-            <span className="text-xs text-muted-foreground">
-              {filtered.length} {filtered.length === 1 ? "message" : "messages"}
+            <span className="text-xs text-muted-foreground mr-1">
+              {filtered.length} {filtered.length === 1 ? "msg" : "msgs"}
             </span>
           </div>
+          
+          <div className="w-full">
+            <Select value={selectedAccountId} onValueChange={(val) => setSelectedAccountId(val)}>
+              <SelectTrigger className="w-full h-8 text-xs bg-muted/30 border-border/50 shadow-none hover:bg-muted/60 transition-colors">
+                <SelectValue placeholder="All Mailboxes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  <div className="flex items-center gap-2">
+                    <Inbox className="w-3.5 h-3.5 text-violet-500" />
+                    <span className="font-semibold text-sm">All Mailboxes</span>
+                  </div>
+                </SelectItem>
+                <div className="h-px bg-muted my-1" />
+                {accounts?.map((acc) => (
+                  <SelectItem key={acc.id} value={acc.id.toString()}>
+                    <div className="flex items-center gap-2 justify-between w-full pr-2">
+                      <span className="truncate flex-1 max-w-[150px]">{acc.label}</span>
+                      <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{acc.email}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <Input
@@ -1224,7 +1387,7 @@ export default function MailPage() {
           onClose={() => setComposeOpen(false)}
           onSent={() => {
             setComposeOpen(false);
-            queryClient.invalidateQueries({ queryKey: getListMailQueryKey({ source: "sent" }) });
+            queryClient.invalidateQueries({ queryKey: ["mail-list", "sent"] });
           }}
         />
       )}

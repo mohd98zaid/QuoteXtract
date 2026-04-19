@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -7,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Plus, Download, Eye, Image as ImageIcon, Printer } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -47,6 +50,54 @@ const toBase64 = (file: File): Promise<string> => new Promise((resolve, reject) 
   reader.onerror = error => reject(error);
 });
 
+async function generatePdfBlob(filename: string): Promise<File> {
+  const element = document.getElementById("print-section");
+  if (!element) throw new Error("print-section not found");
+
+  // Temporarily reveal the element at full scale for capture
+  const originalTransform = element.style.transform;
+  const originalMargin = element.style.marginBottom;
+  element.style.transform = "scale(1)";
+  element.style.marginBottom = "0";
+
+  try {
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: "#ffffff",
+      width: element.scrollWidth,
+      height: element.scrollHeight,
+    });
+
+    const imgData = canvas.toDataURL("image/png");
+    // A4 dimensions in mm
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * pageWidth) / canvas.width;
+
+    // If content is taller than one page, add more pages
+    let heightLeft = imgHeight;
+    let position = 0;
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+    while (heightLeft > 0) {
+      position -= pageHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    const blob = pdf.output("blob");
+    return new File([blob], filename, { type: "application/pdf" });
+  } finally {
+    element.style.transform = originalTransform;
+    element.style.marginBottom = originalMargin;
+  }
+}
+
 export default function NewQuotationPage() {
   const [logoDataUrl] = useState<string | undefined>(() => localStorage.getItem("quotation_logo") || undefined);
   const [stampDataUrl] = useState<string | undefined>(() => localStorage.getItem("quotation_stamp") || undefined);
@@ -55,10 +106,10 @@ export default function NewQuotationPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
-  const { register, control, watch, formState: { errors } } = useForm<QuotationFormValues>({
+  const { register, control, watch, setValue, formState: { errors } } = useForm<QuotationFormValues>({
     resolver: zodResolver(quotationSchema),
     defaultValues: {
-      quotationNumber: `PNP/QTN/2026/${Math.floor(100 + Math.random() * 900)}`,
+      quotationNumber: `PNP/QTN/${new Date().getFullYear()}/___`,
       date: new Date().toISOString().split("T")[0],
       validUntil: "30 Days",
       clientName: "",
@@ -75,6 +126,34 @@ export default function NewQuotationPage() {
       notes: "",
     }
   });
+
+  // On mount: fetch the last saved quotation number and auto-increment it
+  useEffect(() => {
+    const fetchNextNumber = async () => {
+      try {
+        const res = await fetch("/api/quotations?limit=1&page=1");
+        if (!res.ok) return;
+        const data = await res.json();
+        const lastQuotation = data?.data?.[0];
+        const year = new Date().getFullYear();
+        if (lastQuotation?.quotationNumber) {
+          // Match pattern like PNP/QTN/2026/458
+          const match = lastQuotation.quotationNumber.match(/PNP\/QTN\/(\d{4})\/(\d+)/);
+          if (match) {
+            const nextNum = parseInt(match[2], 10) + 1;
+            setValue("quotationNumber", `PNP/QTN/${year}/${nextNum}`);
+            return;
+          }
+        }
+        // No existing quotations or pattern doesn't match â€” start from 100
+        setValue("quotationNumber", `PNP/QTN/${year}/100`);
+      } catch {
+        const year = new Date().getFullYear();
+        setValue("quotationNumber", `PNP/QTN/${year}/100`);
+      }
+    };
+    fetchNextNumber();
+  }, [setValue]);
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -114,10 +193,16 @@ export default function NewQuotationPage() {
 
 
   const handlePrint = () => {
+    // Set page title to quotation number (slashes â†’ dashes) so browser saves PDF with correct filename
+    const originalTitle = document.title;
+    const qNum = formData.quotationNumber || "quotation";
+    const pdfFilename = qNum.replace(/\//g, "-");
+    document.title = pdfFilename;
     window.print();
     setTimeout(() => {
+      document.title = originalTitle;
       setShowTrackDialog(true);
-    }, 500);
+    }, 1000);
   };
 
   const handleTrackInPortal = async () => {
@@ -130,23 +215,37 @@ export default function NewQuotationPage() {
       const taxAmount = subtotal * (Number(pdfData.taxRate || 0) / 100);
       const grandTotal = subtotal + taxAmount;
 
+      // Build notes combining form notes, buyers ref, email, destination, and validity
+      const extraNotes = [
+        pdfData.buyersRef ? `Buyer's Ref: ${pdfData.buyersRef}` : null,
+        pdfData.email ? `Email: ${pdfData.email}` : null,
+        pdfData.destination ? `Destination: ${pdfData.destination}` : null,
+        pdfData.validUntil ? `Valid Until: ${pdfData.validUntil}` : null,
+        pdfData.notes || null,
+      ].filter(Boolean).join("\n");
+
       const res = await fetch("/api/quotations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // Client (customer) info â€” this is an outbound quotation we are sending
           supplierName: pdfData.clientName || "Unknown Client",
           clientAddress: pdfData.clientAddress || null,
           clientContact: pdfData.clientContact || null,
           clientVat: pdfData.clientVat || null,
           supplierEmail: pdfData.email || null,
+          // Quotation meta
           quotationNumber: pdfData.quotationNumber,
           quotationDate: pdfData.date,
           currency: "AED",
           direction: "outbound",
+          // Terms
           paymentTerms: pdfData.termsOfPayment || null,
           deliveryTerms: pdfData.termsOfDelivery || null,
+          // Financials
           totalAmount: String(grandTotal),
-          notes: pdfData.notes || null,
+          // Combined notes with all extra fields
+          notes: extraNotes || null,
         })
       });
 
@@ -161,13 +260,31 @@ export default function NewQuotationPage() {
             body: JSON.stringify({
                partNumber: item.partNo || null,
                description: item.description,
-               quantity: Number(item.quantity),
+               quantity: String(Number(item.quantity) || 0),
                unitPrice: String(item.unitPrice),
                totalPrice: String(Number(item.quantity) * Number(item.unitPrice)),
                leadTime: item.deliveryLeadTime || null,
                currency: "AED"
             })
          });
+      }
+
+      // Generate a PDF from the live preview and attach it to the quotation record
+      try {
+        const pdfFilename = (pdfData.quotationNumber || "quotation").replace(/\//g, "-") + ".pdf";
+        const pdfFile = await generatePdfBlob(pdfFilename);
+        const formDataUpload = new FormData();
+        formDataUpload.append("file", pdfFile, pdfFilename);
+        const attachRes = await fetch(`/api/quotations/${savedQuote.id}/attach-pdf`, {
+          method: "POST",
+          body: formDataUpload,
+        });
+        if (!attachRes.ok) {
+          console.warn("PDF attachment failed:", await attachRes.text());
+        }
+      } catch (pdfErr) {
+        console.warn("PDF generation/upload error:", pdfErr);
+        // Non-fatal — quotation is still saved
       }
 
       toast({ title: "Success", description: "Quotation is now tracked in your portal." });
@@ -187,6 +304,10 @@ export default function NewQuotationPage() {
         ONLY the component inside the PDF Preview pane is printed.
       */}
       <style>{`
+        @page {
+          size: A4;
+          margin: 0;
+        }
         @media print {
           body * {
             visibility: hidden;
@@ -198,7 +319,8 @@ export default function NewQuotationPage() {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%;
+            width: 210mm;
+            min-height: 297mm;
           }
           /* Remove background colors and extra spacing when printing */
           .print\\:shadow-none { box-shadow: none !important; }
@@ -216,8 +338,8 @@ export default function NewQuotationPage() {
             <CardTitle>Meta Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-             <div className="grid grid-cols-3 gap-4">
-               <div className="space-y-2">
+             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+               <div className="space-y-2 md:col-span-2">
                  <Label>Quotation No.</Label>
                  <Input {...register("quotationNumber")} />
                  {errors.quotationNumber && <p className="text-xs text-red-500">{errors.quotationNumber.message}</p>}
@@ -303,7 +425,48 @@ export default function NewQuotationPage() {
                    </div>
                    <div className="w-1/3 space-y-2">
                      <Label>Delivery Lead Time</Label>
-                     <Input {...register(`items.${index}.deliveryLeadTime` as const)} placeholder="2 weeks" />
+                     {/* Number + unit selector — writes combined string into the form field */}
+                     <div className="flex gap-1">
+                       <Input
+                         type="number"
+                         min={1}
+                         placeholder="1"
+                         className="w-16 shrink-0"
+                         value={(() => {
+                           const val = watch(`items.${index}.deliveryLeadTime` as const) || "";
+                           const match = val.match(/^(\d+)/);
+                           return match ? match[1] : "";
+                         })()}
+                         onChange={(e) => {
+                           const cur = watch(`items.${index}.deliveryLeadTime` as const) || "";
+                           const unitMatch = cur.match(/(Days|Weeks|Months)$/i);
+                           const unit = unitMatch ? unitMatch[1] : "Days";
+                           setValue(`items.${index}.deliveryLeadTime` as const, `${e.target.value} ${unit}`);
+                         }}
+                       />
+                       <Select
+                         value={(() => {
+                           const val = watch(`items.${index}.deliveryLeadTime` as const) || "";
+                           const match = val.match(/(Days|Weeks|Months)$/i);
+                           return match ? match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase() : "Days";
+                         })()}
+                         onValueChange={(unit) => {
+                           const cur = watch(`items.${index}.deliveryLeadTime` as const) || "";
+                           const numMatch = cur.match(/^(\d+)/);
+                           const num = numMatch ? numMatch[1] : "1";
+                           setValue(`items.${index}.deliveryLeadTime` as const, `${num} ${unit}`);
+                         }}
+                       >
+                         <SelectTrigger className="flex-1">
+                           <SelectValue />
+                         </SelectTrigger>
+                         <SelectContent>
+                           <SelectItem value="Days">Days</SelectItem>
+                           <SelectItem value="Weeks">Weeks</SelectItem>
+                           <SelectItem value="Months">Months</SelectItem>
+                         </SelectContent>
+                       </Select>
+                     </div>
                    </div>
                    <Button type="button" variant="ghost" size="icon" className="mt-8 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/30 shrink-0" onClick={() => remove(index)} disabled={fields.length === 1}>
                      <Trash2 className="w-4 h-4" />
@@ -406,3 +569,4 @@ export default function NewQuotationPage() {
     </div>
   );
 }
+

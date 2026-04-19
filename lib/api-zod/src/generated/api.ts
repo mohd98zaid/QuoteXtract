@@ -412,8 +412,19 @@ export const GetQuotationsBySupplierResponse = zod.array(
 );
 
 /**
- * @summary List all IMAP-fetched emails
+ * @summary List all fetched emails, optionally filtered by source
  */
+export const ListMailQueryParams = zod.object({
+  source: zod
+    .enum(["imap", "sent"])
+    .optional()
+    .describe("Filter emails by source (inbox vs sent)"),
+  accountId: zod.coerce
+    .number()
+    .optional()
+    .describe("Filter emails by associated mail account ID"),
+});
+
 export const ListMailResponseItem = zod.object({
   id: zod.number(),
   senderName: zod.string().nullish(),
@@ -429,6 +440,72 @@ export const ListMailResponseItem = zod.object({
   createdAt: zod.string(),
 });
 export const ListMailResponse = zod.array(ListMailResponseItem);
+
+/**
+ * @summary List all configured mail accounts
+ */
+export const ListMailAccountsResponseItem = zod
+  .object({
+    label: zod.string(),
+    email: zod.string(),
+    password: zod.string(),
+    imapHost: zod.string(),
+    imapPort: zod.number(),
+    smtpHost: zod.string(),
+    smtpPort: zod.number(),
+  })
+  .and(
+    zod.object({
+      id: zod.number(),
+      secure: zod.boolean(),
+      isActive: zod.boolean(),
+      createdAt: zod.string(),
+    }),
+  );
+export const ListMailAccountsResponse = zod.array(ListMailAccountsResponseItem);
+
+/**
+ * @summary Connect a new mail account
+ */
+export const CreateMailAccountBody = zod.object({
+  label: zod.string(),
+  email: zod.string(),
+  password: zod.string(),
+  imapHost: zod.string(),
+  imapPort: zod.number(),
+  smtpHost: zod.string(),
+  smtpPort: zod.number(),
+});
+
+export const CreateMailAccountResponse = zod
+  .object({
+    label: zod.string(),
+    email: zod.string(),
+    password: zod.string(),
+    imapHost: zod.string(),
+    imapPort: zod.number(),
+    smtpHost: zod.string(),
+    smtpPort: zod.number(),
+  })
+  .and(
+    zod.object({
+      id: zod.number(),
+      secure: zod.boolean(),
+      isActive: zod.boolean(),
+      createdAt: zod.string(),
+    }),
+  );
+
+/**
+ * @summary Remove a mail account configuration
+ */
+export const DeleteMailAccountParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteMailAccountResponse = zod.object({
+  success: zod.boolean().optional(),
+});
 
 /**
  * @summary Get a single email with full body (marks as read)

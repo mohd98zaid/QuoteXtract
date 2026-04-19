@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { eq } from "drizzle-orm";
 import multer from "multer";
 import { getSmtpConfig, saveSmtpConfig, sendMail, getAliases, addAlias, removeAlias } from "../../lib/smtp-mailer";
 import { db, emailsTable } from "@workspace/db";
@@ -58,21 +59,33 @@ router.post("/mail/send", memUpload.array("attachments"), async (req, res): Prom
     contentType: f.mimetype,
   }));
 
-  const smtpCfg = await getSmtpConfig();
-  const resolvedFromEmail = (fromEmail as string | undefined) || smtpCfg.email || "";
-  const resolvedFromName = (fromName as string | undefined) || smtpCfg.fromName || "Me";
+  const accountId = Number(req.body.accountId);
+  if (isNaN(accountId)) {
+    res.status(400).json({ error: "accountId required" });
+    return;
+  }
+
+  const { mailAccountsTable } = await import("@workspace/db");
+  const [account] = await db.select().from(mailAccountsTable).where(eq(mailAccountsTable.id, accountId)).limit(1);
+  if (!account) {
+    res.status(404).json({ error: "Account not found" });
+    return;
+  }
+
+  const resolvedFromName = (fromName as string | undefined) || account.fromName || "QuoteXtract";
 
   try {
     await sendMail({
+      accountId,
       to, cc: cc || undefined, subject, text,
-      fromEmail: resolvedFromEmail || undefined,
       fromName: resolvedFromName,
       attachments: attachments.length > 0 ? attachments : undefined,
     });
 
     await db.insert(emailsTable).values({
+      accountId,
       senderName: resolvedFromName,
-      senderEmail: resolvedFromEmail,
+      senderEmail: account.email,
       recipientEmail: [to, ...(cc ? [cc] : [])].filter(Boolean).join(", "),
       subject,
       bodyText: text,

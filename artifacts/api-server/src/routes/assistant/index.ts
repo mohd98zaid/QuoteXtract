@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { openai } from "@workspace/integrations-local-ai-server";
-import { db, quotationsTable, quotationItemsTable } from "@workspace/db";
-import { eq, ilike, or } from "drizzle-orm";
+import { db, quotationsTable, quotationItemsTable, mailAccountsTable, emailsTable, settingsTable } from "@workspace/db";
+import { eq, ilike, or, count } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -51,6 +51,30 @@ const tools = [
         },
         required: ["quotationId"],
       },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_mail_accounts",
+      description: "List all connected email accounts and their connection details (excluding passwords).",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_system_status",
+      description: "Get a summary of system activity, including total emails processed and quotation counts.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_system_settings",
+      description: "Retrieve general system-wide configuration settings.",
+      parameters: { type: "object", properties: {} },
     },
   },
 ];
@@ -110,6 +134,42 @@ async function handleToolCall(toolCall: any) {
     });
   }
 
+  if (toolCall.function.name === "get_mail_accounts") {
+    const accounts = await db
+      .select({
+        id: mailAccountsTable.id,
+        label: mailAccountsTable.label,
+        email: mailAccountsTable.email,
+        imapHost: mailAccountsTable.imapHost,
+        smtpHost: mailAccountsTable.smtpHost,
+        isActive: mailAccountsTable.isActive,
+      })
+      .from(mailAccountsTable);
+    return JSON.stringify(accounts);
+  }
+
+  if (toolCall.function.name === "get_system_status") {
+    const [emailStats] = await db.select({ total: count() }).from(emailsTable);
+    const [quoteStats] = await db.select({ total: count() }).from(quotationsTable);
+    
+    // Get breakdown by status
+    const statusBreakdown = await db
+      .select({ status: emailsTable.status, count: count() })
+      .from(emailsTable)
+      .groupBy(emailsTable.status);
+
+    return JSON.stringify({
+      totalEmails: Number(emailStats.total),
+      totalQuotations: Number(quoteStats.total),
+      emailStatusBreakdown: statusBreakdown.map(s => ({ status: s.status, count: Number(s.count) }))
+    });
+  }
+
+  if (toolCall.function.name === "get_system_settings") {
+    const settings = await db.select().from(settingsTable);
+    return JSON.stringify(settings);
+  }
+
   return JSON.stringify({ error: "Unknown tool" });
 }
 
@@ -126,12 +186,18 @@ router.post("/chat", async (req, res): Promise<void> => {
     // Prepend a system prompt
     const systemPrompt = {
       role: "system" as const,
-      content: `You are QuoteXtract Assistant, an AI that helps users find and understand their quotation and customer data.
-CRITICAL INSTRUCTION: If the user provides a name (e.g. "IAN", "Apple", "John"), a single word, or asks to search for something, you MUST immediately call the "search_quotations" tool with that query. Do not ask for clarification first. Just search!
-Use the provided tools to fetch real data from the database.
-Always format numbers clearly. Use Markdown tables if returning multiple rows or items.
-If a search yields no results, politely inform the user.
-Keep answers concise but helpful.`,
+      content: `You are QuoteXtract Total System Assistant. You have full access to view (but not modify) the system's configuration, email status, and quotation data.
+CRITICAL INSTRUCTION: If the user provides a name (e.g. "IAN", "Apple", "John"), a single word, or asks to search for something, you MUST immediately call the "search_quotations" tool with that query.
+Use the provided tools to answer ANY system-related queries:
+- For status/counts: Use "get_system_status".
+- For mail account settings: Use "get_mail_accounts".
+- For general configuration: Use "get_system_settings".
+- For quotation details: Use "search_quotations" and "get_quotation_items".
+
+Always format data clearly. Use Markdown tables for lists.
+When presenting a specific quotation, always provide a clickable link: [View Details](/quotations/{id}).
+If the user asks about system health, mention the number of processed vs failed emails.
+Keep answers professional, concise, and helpful.`,
     };
 
     const thread = [systemPrompt, ...messages];

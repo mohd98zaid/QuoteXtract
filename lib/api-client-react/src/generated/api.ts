@@ -22,13 +22,17 @@ import type {
   ConfigureImap200,
   CreateEmailBody,
   CreateItemBody,
+  DeleteMailAccount200,
   Email,
   ErrorResponse,
   ExtractQuotationBody,
   HealthStatus,
   ImapConfigInput,
   ImapStatus,
+  ListMailParams,
   ListQuotationsParams,
+  MailAccount,
+  MailAccountInput,
   MailDetail,
   MailItem,
   Quotation,
@@ -1494,37 +1498,59 @@ export function useGetQuotationsBySupplier<
 }
 
 /**
- * @summary List all IMAP-fetched emails
+ * @summary List all fetched emails, optionally filtered by source
  */
-export const getListMailUrl = () => {
-  return `/api/mail`;
+export const getListMailUrl = (params?: ListMailParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mail?${stringifiedParams}`
+    : `/api/mail`;
 };
 
-export const listMail = async (options?: RequestInit): Promise<MailItem[]> => {
-  return customFetch<MailItem[]>(getListMailUrl(), {
+export const listMail = async (
+  params?: ListMailParams,
+  options?: RequestInit,
+): Promise<MailItem[]> => {
+  return customFetch<MailItem[]>(getListMailUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListMailQueryKey = () => {
-  return [`/api/mail`] as const;
+export const getListMailQueryKey = (params?: ListMailParams) => {
+  return [`/api/mail`, ...(params ? [params] : [])] as const;
 };
 
 export const getListMailQueryOptions = <
   TData = Awaited<ReturnType<typeof listMail>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<Awaited<ReturnType<typeof listMail>>, TError, TData>;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListMailParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listMail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListMailQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListMailQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listMail>>> = ({
     signal,
-  }) => listMail({ signal, ...requestOptions });
+  }) => listMail(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listMail>>,
@@ -1539,17 +1565,24 @@ export type ListMailQueryResult = NonNullable<
 export type ListMailQueryError = ErrorType<unknown>;
 
 /**
- * @summary List all IMAP-fetched emails
+ * @summary List all fetched emails, optionally filtered by source
  */
 
 export function useListMail<
   TData = Awaited<ReturnType<typeof listMail>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<Awaited<ReturnType<typeof listMail>>, TError, TData>;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListMailQueryOptions(options);
+>(
+  params?: ListMailParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listMail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMailQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -1557,6 +1590,251 @@ export function useListMail<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List all configured mail accounts
+ */
+export const getListMailAccountsUrl = () => {
+  return `/api/mail-accounts`;
+};
+
+export const listMailAccounts = async (
+  options?: RequestInit,
+): Promise<MailAccount[]> => {
+  return customFetch<MailAccount[]>(getListMailAccountsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListMailAccountsQueryKey = () => {
+  return [`/api/mail-accounts`] as const;
+};
+
+export const getListMailAccountsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMailAccounts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMailAccounts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListMailAccountsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listMailAccounts>>
+  > = ({ signal }) => listMailAccounts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMailAccounts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListMailAccountsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMailAccounts>>
+>;
+export type ListMailAccountsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all configured mail accounts
+ */
+
+export function useListMailAccounts<
+  TData = Awaited<ReturnType<typeof listMailAccounts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMailAccounts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMailAccountsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Connect a new mail account
+ */
+export const getCreateMailAccountUrl = () => {
+  return `/api/mail-accounts`;
+};
+
+export const createMailAccount = async (
+  mailAccountInput: MailAccountInput,
+  options?: RequestInit,
+): Promise<MailAccount> => {
+  return customFetch<MailAccount>(getCreateMailAccountUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(mailAccountInput),
+  });
+};
+
+export const getCreateMailAccountMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMailAccount>>,
+    TError,
+    { data: BodyType<MailAccountInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createMailAccount>>,
+  TError,
+  { data: BodyType<MailAccountInput> },
+  TContext
+> => {
+  const mutationKey = ["createMailAccount"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createMailAccount>>,
+    { data: BodyType<MailAccountInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createMailAccount(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateMailAccountMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createMailAccount>>
+>;
+export type CreateMailAccountMutationBody = BodyType<MailAccountInput>;
+export type CreateMailAccountMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Connect a new mail account
+ */
+export const useCreateMailAccount = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMailAccount>>,
+    TError,
+    { data: BodyType<MailAccountInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createMailAccount>>,
+  TError,
+  { data: BodyType<MailAccountInput> },
+  TContext
+> => {
+  return useMutation(getCreateMailAccountMutationOptions(options));
+};
+
+/**
+ * @summary Remove a mail account configuration
+ */
+export const getDeleteMailAccountUrl = (id: number) => {
+  return `/api/mail-accounts/${id}`;
+};
+
+export const deleteMailAccount = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeleteMailAccount200> => {
+  return customFetch<DeleteMailAccount200>(getDeleteMailAccountUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteMailAccountMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteMailAccount>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteMailAccount>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteMailAccount"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteMailAccount>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteMailAccount(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteMailAccountMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteMailAccount>>
+>;
+
+export type DeleteMailAccountMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove a mail account configuration
+ */
+export const useDeleteMailAccount = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteMailAccount>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteMailAccount>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteMailAccountMutationOptions(options));
+};
 
 /**
  * @summary Get a single email with full body (marks as read)

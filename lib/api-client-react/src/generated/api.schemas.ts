@@ -339,6 +339,23 @@ export interface WebhookConfig {
   hostingerSetup: string[];
 }
 
+export interface MailAccountInput {
+  label: string;
+  email: string;
+  password: string;
+  imapHost: string;
+  imapPort: number;
+  smtpHost: string;
+  smtpPort: number;
+}
+
+export type MailAccount = MailAccountInput & {
+  id: number;
+  secure: boolean;
+  isActive: boolean;
+  createdAt: string;
+};
+
 export type UploadPdfBody = {
   file: Blob;
 };
@@ -364,6 +381,29 @@ export type ListQuotationsParams = {
 
 export type SearchQuotationsParams = {
   q: string;
+};
+
+export type ListMailParams = {
+  /**
+   * Filter emails by source (inbox vs sent)
+   */
+  source?: ListMailSource;
+  /**
+   * Filter emails by associated mail account ID
+   */
+  accountId?: number;
+};
+
+export type ListMailSource =
+  (typeof ListMailSource)[keyof typeof ListMailSource];
+
+export const ListMailSource = {
+  imap: "imap",
+  sent: "sent",
+} as const;
+
+export type DeleteMailAccount200 = {
+  success?: boolean;
 };
 
 export type ConfigureImap200 = {

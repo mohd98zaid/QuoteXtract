@@ -1,20 +1,56 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, inArray } from "drizzle-orm";
-import { db, emailsTable, quotationsTable, quotationItemsTable } from "@workspace/db";
+import { eq, desc, and, inArray, isNull } from "drizzle-orm";
+import { db, emailsTable, quotationsTable, quotationItemsTable, mailAccountsTable } from "@workspace/db";
 import { z } from "zod";
 import { extractFromPdf } from "../../lib/pdf-extractor";
 import { logger } from "../../lib/logger";
 import { restartPoller, restorePdfFromImap, runScan } from "../../lib/imap-poller";
+import { openai } from "@workspace/integrations-local-ai-server";
 
 const router: IRouter = Router();
 
-// ── GET /api/mail ──────────────────────────────────────────────────────────
-// List emails by source. ?source=sent for sent, otherwise imap.
+// POST /api/mail/repair
+router.post("/mail/repair", async (req, res): Promise<void> => {
+  try {
+    const accounts = await db.select().from(mailAccountsTable);
+    if (accounts.length === 0) {
+      res.status(400).json({ error: "No accounts found to associate with" });
+      return;
+    }
+    const defaultAccountId = accounts[0].id;
+
+    // 1. Fix null accountId
+    await db.update(emailsTable).set({ accountId: defaultAccountId }).where(isNull(emailsTable.accountId));
+
+    // 2. Fix missing source
+    await db.update(emailsTable).set({ source: "imap" }).where(isNull(emailsTable.source));
+
+    res.json({ success: true, message: "Database records repaired" });
+  } catch (err: any) {
+    logger.error({ err }, "Database repair failed");
+    res.status(500).json({ error: "Repair failed" });
+  }
+});
+
+// GET /api/mail
 router.get("/mail", async (req, res): Promise<void> => {
   const source = req.query.source === "sent" ? "sent" : "imap";
+  const accountId = req.query.accountId as string | undefined;
+
+  const conditions = [eq(emailsTable.source, source)];
+  if (accountId && accountId !== "all" && accountId !== "undefined") {
+    const aid = parseInt(accountId, 10);
+    if (!isNaN(aid)) {
+      conditions.push(eq(emailsTable.accountId, aid));
+    }
+  }
+
+  logger.info({ source, accountId, conditions: conditions.length }, "Fetching mail list");
+
   const emails = await db
     .select({
       id: emailsTable.id,
+      accountId: emailsTable.accountId,
       senderName: emailsTable.senderName,
       senderEmail: emailsTable.senderEmail,
       recipientEmail: emailsTable.recipientEmail,
@@ -29,7 +65,7 @@ router.get("/mail", async (req, res): Promise<void> => {
       createdAt: emailsTable.createdAt,
     })
     .from(emailsTable)
-    .where(eq(emailsTable.source, source))
+    .where(and(...conditions))
     .orderBy(desc(emailsTable.createdAt));
 
   res.json(emails);
@@ -219,5 +255,48 @@ router.post("/mail/scan", async (_req, res): Promise<void> => {
 });
 
 
+
+// ── POST /api/mail/enhance ────────────────────────────────────────────────
+const EnhanceSchema = z.object({
+  draftText: z.string(),
+  originalText: z.string().optional(),
+});
+
+router.post("/mail/enhance", async (req, res): Promise<void> => {
+  try {
+    const parsed = EnhanceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid payload", details: parsed.error });
+      return;
+    }
+
+    const { draftText, originalText } = parsed.data;
+    const model = process.env.LOCAL_AI_MODEL ?? "gpt-4o";
+
+    const systemPrompt = `You are an expert business communicator. 
+Your task is to rewrite a rough email draft into a professional, clear, and polite email.
+Maintain the original intent and any key details (like names or quote numbers).
+If an "original email context" is provided, ensure the tone is appropriate for a reply.
+CRITICAL: ONLY return the rewritten email body. Do NOT include any conversation history, "Original message" sections, or quoted text from the context. Rewrite ONLY what is in the "Draft to enhance" section.`;
+
+    const userPrompt = `Draft to enhance: "${draftText}"
+${originalText ? `Original email context: "${originalText}"` : ""}`;
+
+    const completion = await openai.chat.completions.create({
+      model: model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.7,
+    });
+
+    const enhanced = completion.choices[0].message.content?.trim();
+    res.json({ enhanced });
+  } catch (err: any) {
+    logger.error({ err }, "AI enhancement failed");
+    res.status(500).json({ error: "Failed to enhance draft with AI" });
+  }
+});
 
 export default router;

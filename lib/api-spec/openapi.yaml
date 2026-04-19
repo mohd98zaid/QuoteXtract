@@ -423,7 +423,19 @@ paths:
     get:
       operationId: listMail
       tags: [emails]
-      summary: List all IMAP-fetched emails
+      summary: List all fetched emails, optionally filtered by source
+      parameters:
+        - in: query
+          name: source
+          schema:
+            type: string
+            enum: [imap, sent]
+          description: Filter emails by source (inbox vs sent)
+        - in: query
+          name: accountId
+          schema:
+            type: integer
+          description: Filter emails by associated mail account ID
       responses:
         "200":
           description: List of emails
@@ -433,6 +445,68 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/MailItem"
+
+  # ── Mail Accounts ──────────────────────────────────────────────────────────
+  /mail-accounts:
+    get:
+      operationId: listMailAccounts
+      tags: [settings]
+      summary: List all configured mail accounts
+      responses:
+        "200":
+          description: List of mail accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MailAccount"
+    post:
+      operationId: createMailAccount
+      tags: [settings]
+      summary: Connect a new mail account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MailAccountInput"
+      responses:
+        "200":
+          description: Created mail account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MailAccount"
+        "400":
+          description: Connection failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /mail-accounts/{id}:
+    delete:
+      operationId: deleteMailAccount
+      tags: [settings]
+      summary: Remove a mail account configuration
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
 
   /mail/{id}:
     get:
@@ -1032,3 +1106,48 @@ components:
         - multipartUrl
         - secretRequired
         - hostingerSetup
+
+    MailAccountInput:
+      type: object
+      properties:
+        label:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        imapHost:
+          type: string
+        imapPort:
+          type: integer
+        smtpHost:
+          type: string
+        smtpPort:
+          type: integer
+      required:
+        - label
+        - email
+        - password
+        - imapHost
+        - imapPort
+        - smtpHost
+        - smtpPort
+
+    MailAccount:
+      allOf:
+        - $ref: "#/components/schemas/MailAccountInput"
+        - type: object
+          properties:
+            id:
+              type: integer
+            secure:
+              type: boolean
+            isActive:
+              type: boolean
+            createdAt:
+              type: string
+          required:
+            - id
+            - secure
+            - isActive
+            - createdAt

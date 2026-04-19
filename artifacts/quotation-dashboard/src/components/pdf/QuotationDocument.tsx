@@ -1,5 +1,38 @@
 import React from "react";
 
+// ── Number to words (AED) ────────────────────────────────────────────────────
+const ones = ["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine",
+  "Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen",
+  "Seventeen","Eighteen","Nineteen"];
+const tens = ["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
+
+function chunkToWords(n: number): string {
+  if (n === 0) return "";
+  if (n < 20) return ones[n];
+  if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? " " + ones[n % 10] : "");
+  return ones[Math.floor(n / 100)] + " Hundred" + (n % 100 !== 0 ? " " + chunkToWords(n % 100) : "");
+}
+
+function numberToWords(amount: number): string {
+  if (isNaN(amount) || amount < 0) return "";
+  const intPart = Math.floor(amount);
+  const decPart = Math.round((amount - intPart) * 100);
+  const segments: string[] = [];
+  const billions  = Math.floor(intPart / 1_000_000_000);
+  const millions  = Math.floor((intPart % 1_000_000_000) / 1_000_000);
+  const thousands = Math.floor((intPart % 1_000_000) / 1_000);
+  const remainder = intPart % 1_000;
+  if (billions)  segments.push(chunkToWords(billions)  + " Billion");
+  if (millions)  segments.push(chunkToWords(millions)  + " Million");
+  if (thousands) segments.push(chunkToWords(thousands) + " Thousand");
+  if (remainder) segments.push(chunkToWords(remainder));
+  if (segments.length === 0) segments.push("Zero");
+  let result = "UAE Dirham " + segments.join(" ");
+  if (decPart > 0) result += " and " + chunkToWords(decPart) + " Fils";
+  result += " Only";
+  return result;
+}
+
 export type QuotationData = {
   quotationNumber: string;
   date: string;
@@ -57,14 +90,14 @@ export const QuotationDocument = ({ data }: { data: QuotationData }) => {
         
         {/* Right Header */}
         <div className="flex flex-col items-end">
-           <div className="w-1/2 min-w-[200px]">
+           <div className="w-3/4 min-w-[280px]">
              <div className="flex justify-between border-b border-black pb-1 mb-1 font-bold">
                <span>Quotation</span>
                <span>Dated</span>
              </div>
-             <div className="flex justify-between mb-2">
-               <span>{data.quotationNumber}</span>
-               <span>{data.date}</span>
+             <div className="flex justify-between mb-2 gap-4">
+               <span className="truncate">{data.quotationNumber}</span>
+               <span className="shrink-0">{data.date}</span>
              </div>
              <div className="text-right font-bold underline mt-4">
                 Mode/Terms of Payment
@@ -76,47 +109,59 @@ export const QuotationDocument = ({ data }: { data: QuotationData }) => {
         </div>
       </div>
 
-      {/* Meta Grid Section */}
-      <div className="grid grid-cols-2 mt-6 mb-8 gap-x-12 gap-y-2">
-         {/* Left Col Meta */}
-         <div className="space-y-4">
-            <div className="flex">
-               <span className="w-40 font-bold">Buyer's Ref./Order No.</span>
-               <span className="flex-1">{data.buyersRef || ""}</span>
-            </div>
-            <div className="flex">
-               <span className="w-40 font-bold">Email</span>
-               <span className="flex-1">{data.email || ""}</span>
-            </div>
-            <div className="flex">
-               <span className="w-40 font-bold">Validity</span>
-               <span className="flex-1">{data.validUntil || ""}</span>
-            </div>
-            <div className="flex">
-               <span className="w-40 font-bold">Terms of Delivery</span>
-               <span className="flex-1">{data.termsOfDelivery || "Ex-Work Dubai"}</span>
-            </div>
-            <div className="flex items-start mt-6">
-               <span className="w-40 font-bold text-lg">Customer</span>
-               <div className="flex-1 text-lg leading-tight">
-                  <p className="font-bold">{data.clientName}</p>
-                  <p className="whitespace-pre-wrap">{data.clientAddress}</p>
-                  <p className="whitespace-pre-wrap text-sm mt-1">{data.clientContact}</p>
+      {/* Customer Details heading sits ABOVE the two-column grid */}
+      <p className="font-bold text-base border-b border-black pb-1 mt-6 mb-3">Customer Details</p>
+
+      {/* Meta Grid Section — Customer LEFT, Terms/Refs RIGHT */}
+      <div className="grid grid-cols-2 mb-8 gap-x-12 items-start">
+
+         {/* LEFT — Customer info */}
+         <div className="space-y-1">
+            <p className="font-bold text-sm">{data.clientName}</p>
+            {data.clientAddress && (
+               <p className="whitespace-pre-wrap text-xs leading-relaxed">{data.clientAddress}</p>
+            )}
+            {data.clientContact && (
+               <p className="whitespace-pre-wrap text-xs text-gray-600 mt-1">
+                  <span className="font-bold text-black">Contact: </span>{data.clientContact}
+               </p>
+            )}
+            {data.email && (
+               <p className="text-xs mt-1">
+                  <span className="font-bold">Email: </span>{data.email}
+               </p>
+            )}
+            {data.clientVat && (
+               <p className="text-xs mt-1">
+                  <span className="font-bold">VAT / TRN: </span>{data.clientVat}
+               </p>
+            )}
+         </div>
+
+         {/* RIGHT — Reference & Terms */}
+         <div className="space-y-2 text-xs">
+            {data.buyersRef && (
+               <div className="flex">
+                  <span className="w-36 font-bold shrink-0">Buyer's Ref./Order No.</span>
+                  <span>{data.buyersRef}</span>
                </div>
-            </div>
-         </div>
-         
-         {/* Right Col Meta */}
-         <div className="space-y-4">
+            )}
             <div className="flex">
-               <span className="w-32 font-bold">Other Reference(s)</span>
-               <span className="flex-1"></span>
+               <span className="w-36 font-bold shrink-0">Validity</span>
+               <span>{data.validUntil || "30 Days"}</span>
             </div>
-            <div className="flex mt-8">
-               <span className="w-32 font-bold">Destination</span>
-               <span className="flex-1">{data.destination || ""}</span>
+            <div className="flex">
+               <span className="w-36 font-bold shrink-0">Terms of Delivery</span>
+               <span>{data.termsOfDelivery || "Ex-Work Dubai"}</span>
             </div>
+            {data.destination && (
+               <div className="flex">
+                  <span className="w-36 font-bold shrink-0">Destination</span>
+                  <span>{data.destination}</span>
+               </div>
+            )}
          </div>
+
       </div>
 
       {/* Items Table - Exactly like PDF */}
@@ -202,25 +247,20 @@ export const QuotationDocument = ({ data }: { data: QuotationData }) => {
              <p className="mb-4 text-[10px]">
                PLUMS AND PEARLS FZE LLC<br/>
                TRN : 104330330200003<br/>
-               E-Mail : info@plumsandpearls.com<br/>
-               This is a Computer Generated Document
+               E-Mail : info@plumsandpearls.com
              </p>
-             <div className="mb-2">
-                 <span className="font-bold border-b border-dashed border-black pb-[2px]">Customer VAT / TRN</span>
-                 <span className="ml-4">: {data.clientVat || "______________"}</span>
-             </div>
              <div>
                 <p className="font-bold underline mb-1">Amount Chargeable (in words)</p>
-                <p>UAE : AED  {/* Leaving placeholder for words engine if requested later, else manual note */} As per Grand Total Only</p>
+                <p className="text-[10px] leading-relaxed">{numberToWords(grandTotal)}</p>
              </div>
           </div>
-          <div className="w-2/5 flex flex-col items-center justify-end relative">
-             <div className="absolute top-0 right-0">
+          <div className="w-2/5 flex flex-col items-end justify-between pr-4">
+             <div className="self-end">
                <span className="font-bold text-xl uppercase italic">AUTHROIZED BY</span>
              </div>
              
              {/* Dynamic Settings Stamp Rendering */}
-             <div className="mt-8">
+             <div className="mt-4 self-end">
                {data.stampDataUrl ? (
                  <img src={data.stampDataUrl} alt="Stamp" className="w-32 h-32 object-contain" />
                ) : (
@@ -229,16 +269,17 @@ export const QuotationDocument = ({ data }: { data: QuotationData }) => {
                  </div>
                )}
              </div>
-             
-             {data.logoDataUrl && (
-                 <img src={data.logoDataUrl} alt="Logo" className="w-24 mt-2 object-contain hidden" /> 
-             )}
           </div>
         </div>
       </div>
       
+      {/* Footer Disclaimer */}
+      <div className="mt-4 text-center font-bold text-[10px] text-gray-700">
+         This is a Computer Generated Document
+      </div>
+
       {/* Page Break / Footer Text */}
-      <div className="mt-8 w-full border-t border-dashed border-gray-400 pt-2 text-center text-gray-500 font-mono text-[9px]">
+      <div className="mt-4 w-full border-t border-dashed border-gray-400 pt-2 text-center text-gray-500 font-mono text-[9px]">
          ----------------Page (0) Break----------------
       </div>
 
