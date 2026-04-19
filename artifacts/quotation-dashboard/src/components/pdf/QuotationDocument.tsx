@@ -70,6 +70,11 @@ export const QuotationDocument = ({ data }: { data: QuotationData }) => {
 
   return (
     <div className="bg-white text-black p-8 font-sans text-xs w-[210mm] min-h-[297mm] mx-auto shadow-lg relative print:shadow-none print:w-[210mm] print:p-8 print:m-0" id="quotation-print-area">
+      {/* Machine-readable hint for AI extraction — rendered as invisible text in print/PDF */}
+      <div style={{ position: 'absolute', left: '-9999px', top: 0, fontSize: '1px', color: 'transparent', userSelect: 'none' }} aria-hidden="true">
+        [EXTRACTION-HINTS] DOCUMENT-TYPE: QUOTATION ISSUER: PLUMS AND PEARLS FZE LLC (sender, NOT the customer) CUSTOMER-SECTION-STARTS: Customer Details
+      </div>
+
       
       {/* Header Grid */}
       <div className="grid grid-cols-2 gap-4 mb-4">

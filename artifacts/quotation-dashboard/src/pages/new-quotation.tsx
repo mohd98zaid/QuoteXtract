@@ -50,7 +50,7 @@ const toBase64 = (file: File): Promise<string> => new Promise((resolve, reject) 
   reader.onerror = error => reject(error);
 });
 
-async function generatePdfBlob(filename: string): Promise<File> {
+async function generatePdfBlob(filename: string, pdfData?: QuotationData): Promise<File> {
   const element = document.getElementById("print-section");
   if (!element) throw new Error("print-section not found");
 
@@ -81,6 +81,29 @@ async function generatePdfBlob(filename: string): Promise<File> {
     // If content is taller than one page, add more pages
     let heightLeft = imgHeight;
     let position = 0;
+
+    // INJECT DATA LAYER FOR AI PARSERS (Fixes "Unknown Customer" textless PDF issue)
+    let machineText = "";
+    if (pdfData) {
+      const subtotal = pdfData.items.reduce((acc, item) => acc + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
+      const taxAmount = subtotal * (Number(pdfData.taxRate || 0) / 100);
+      const grandTotal = subtotal + taxAmount;
+      
+      machineText = `[EXTRACTION-HINTS] DOCUMENT-TYPE: QUOTATION ISSUER: PLUMS AND PEARLS FZE LLC (sender, NOT the customer) CUSTOMER-SECTION-STARTS: Customer Details
+Customer Name: ${pdfData.clientName}
+Customer Address: ${pdfData.clientAddress}
+Customer Contact: ${pdfData.clientContact}
+Customer VAT: ${pdfData.clientVat}
+Quotation Number: ${pdfData.quotationNumber}
+Date: ${pdfData.date}
+Total Amount: ${grandTotal}
+Items:
+${pdfData.items.map(i => `- ${i.partNo} | ${i.description} | ${i.quantity} @ ${i.unitPrice}`).join("\n")}`;
+      
+      console.log("[DEBUG] Generating PDF with machine-readable layer:", machineText.slice(0, 100) + "...");
+    }
+
+    // 1. First, generate all visual pages (the "screenshot" images)
     pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
     heightLeft -= pageHeight;
     while (heightLeft > 0) {
@@ -88,6 +111,19 @@ async function generatePdfBlob(filename: string): Promise<File> {
       pdf.addPage();
       pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
       heightLeft -= pageHeight;
+    }
+
+    // 2. APPEND GUARANTEED MACHINE-READABLE DATA PAGE (Appendix)
+    if (machineText) {
+      pdf.addPage();
+      pdf.setTextColor(0, 0, 0); // Standard black
+      pdf.setFontSize(10); // Standard readable size
+      const textLines = pdf.splitTextToSize(machineText, 190);
+      
+      pdf.text("--- SYSTEM DATA LAYER (MACHINE READABLE) ---", 10, 10);
+      pdf.text(textLines, 10, 20);
+      
+      console.log("[DEBUG] Appended machine-readable data appendix to PDF.");
     }
 
     const blob = pdf.output("blob");
@@ -272,7 +308,7 @@ export default function NewQuotationPage() {
       // Generate a PDF from the live preview and attach it to the quotation record
       try {
         const pdfFilename = (pdfData.quotationNumber || "quotation").replace(/\//g, "-") + ".pdf";
-        const pdfFile = await generatePdfBlob(pdfFilename);
+        const pdfFile = await generatePdfBlob(pdfFilename, pdfData);
         const formDataUpload = new FormData();
         formDataUpload.append("file", pdfFile, pdfFilename);
         const attachRes = await fetch(`/api/quotations/${savedQuote.id}/attach-pdf`, {

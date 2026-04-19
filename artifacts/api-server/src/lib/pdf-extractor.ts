@@ -57,28 +57,47 @@ export async function extractFromPdf(storageKey: string): Promise<ExtractedQuota
   }
 
   const pdfText = await extractTextFromPdf(filePath);
+  
+  // DEBUG: Check what was actually extracted
+  console.log(`[DEBUG] PDF Extracted Text length: ${pdfText.length}`);
+  console.log(`[DEBUG] PDF Extracted Text (first 500 chars): "${pdfText.slice(0, 500)}"`);
 
   // Truncate PDF text so a small local model won't OOM or loop
   const truncatedText = pdfText.slice(0, 3000) || "(No text extracted — may be scanned image. Use extractionScore: 0.)";
 
-  const systemPrompt = `You are a data extraction AI. You extract structured data from documents into a JSON object. No markdown, no explanations. 
-CRITICAL RULE: The TRN '104330330200003' and the company 'PLUMS AND PEARLS FZE LLC' belong to the issuer/supplier, NOT the customer. You must NEVER extract '104330330200003' as the customer VAT or clientVat. Find the specific customer's VAT/TRN. If the document has no other TRN for the customer, set clientVat to null.`;
+  const systemPrompt = `You are a precise data extraction AI that extracts structured data from quotation/invoice PDF documents.
 
-  const userPrompt = `Extract information from the document text below into a JSON object. Use null if a field is not found.
+CRITICAL DOCUMENT STRUCTURE RULES:
+1. Every quotation has TWO parties:
+   - ISSUER/SENDER: The company that CREATED and SENT the document. They appear at the top of the document in the header/letterhead. Do NOT extract them as the customer.
+   - CUSTOMER/RECIPIENT: The company RECEIVING the quote. They appear under labels like 'Customer Details', 'To:', 'Attention:', 'Billed To:', 'Ship To:', etc.
+2. Our company 'PLUMS AND PEARLS FZE LLC' is ALWAYS the issuer. If you see this name, it is the sender — NEVER the customer.
+3. The TRN '104330330200003' belongs to PLUMS AND PEARLS FZE LLC (issuer). NEVER assign it to the customer.
+4. Extract only the CUSTOMER's name, address, contact, and VAT number — NOT the issuer's.
+5. For system-generated PDFs: look specifically under the 'Customer Details' section heading for the customer's information.
 
-JSON Schema format to follow:
+Return ONLY a raw JSON object. No markdown, no explanation.`;
+
+  const userPrompt = `Extract the following information from the quotation document below. Return a JSON object.
+
+IMPORTANT:
+- "supplierName" = the NAME OF THE CUSTOMER (the company receiving this quotation, NOT the company that issued it)
+- The issuer/sender appears in the header/top of the document — DO NOT use them as the customer
+- Look for 'Customer Details', 'To:', 'Attention' sections to find the true customer
+
+JSON Schema:
 {
-  "supplierName": "string | null (Name of the customer receiving the quote)",
-  "clientAddress": "string | null",
-  "clientContact": "string | null",
-  "clientVat": "string | null",
-  "supplierEmail": "string | null",
-  "quotationNumber": "string | null",
-  "quotationDate": "string | null (YYYY-MM-DD)",
+  "supplierName": "string | null — The CUSTOMER company name (recipient of quote, NOT the issuer at the top)",
+  "clientAddress": "string | null — The customer's address",
+  "clientContact": "string | null — The customer's phone or contact number",
+  "clientVat": "string | null — The customer's VAT/TRN number (NOT 104330330200003 which belongs to the issuer)",
+  "supplierEmail": "string | null — The customer's email",
+  "quotationNumber": "string | null — The document/quotation reference number",
+  "quotationDate": "string | null — Document date in YYYY-MM-DD format",
   "currency": "string | null",
   "paymentTerms": "string | null",
   "deliveryTerms": "string | null",
-  "totalAmount": "string | null",
+  "totalAmount": "string | null — The grand total amount as a plain number string",
   "items": [
     {
       "partNumber": "string | null",
@@ -92,7 +111,7 @@ JSON Schema format to follow:
       "notes": "string | null"
     }
   ],
-  "extractionScore": "number (0-100)"
+  "extractionScore": "number (0-100 confidence)"
 }
 
 DOCUMENT TEXT:
