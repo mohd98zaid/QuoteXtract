@@ -51,59 +51,62 @@ const toBase64 = (file: File): Promise<string> => new Promise((resolve, reject) 
 });
 
 async function generatePdfBlob(filename: string, pdfData?: QuotationData): Promise<File> {
-  const element = document.getElementById("print-section");
-  if (!element) throw new Error("print-section not found");
+  const originalElement = document.getElementById("print-section");
+  if (!originalElement) throw new Error("print-section not found");
 
-  // Temporarily reveal the element at full scale for capture
-  const originalTransform = element.style.transform;
-  const originalMargin = element.style.marginBottom;
-  element.style.transform = "scale(1)";
-  element.style.marginBottom = "0";
+  // Clone the element to avoid layout issues and escape overflow clipping
+  const clone = originalElement.cloneNode(true) as HTMLElement;
+  clone.style.position = "absolute";
+  clone.style.left = "-9999px";
+  clone.style.top = "0";
+  clone.style.width = "210mm";
+  clone.style.transform = "none";
+  clone.style.marginBottom = "0";
+  document.body.appendChild(clone);
 
   try {
-    const canvas = await html2canvas(element, {
+    // Longer delay to ensure fonts and images are fully rendered
+    await new Promise((r) => setTimeout(r, 500));
+
+    const canvas = await html2canvas(clone, {
       scale: 2,
       useCORS: true,
       logging: false,
       backgroundColor: "#ffffff",
-      width: element.scrollWidth,
-      height: element.scrollHeight,
+      width: clone.scrollWidth,
+      height: clone.scrollHeight,
     });
 
     const imgData = canvas.toDataURL("image/png");
-    // A4 dimensions in mm
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const imgWidth = pageWidth;
     const imgHeight = (canvas.height * pageWidth) / canvas.width;
 
-    // If content is taller than one page, add more pages
     let heightLeft = imgHeight;
     let position = 0;
 
-    // INJECT DATA LAYER FOR AI PARSERS (Fixes "Unknown Customer" textless PDF issue)
     let machineText = "";
     if (pdfData) {
       const subtotal = pdfData.items.reduce((acc, item) => acc + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
       const taxAmount = subtotal * (Number(pdfData.taxRate || 0) / 100);
       const grandTotal = subtotal + taxAmount;
       
-      machineText = `[EXTRACTION-HINTS] DOCUMENT-TYPE: QUOTATION ISSUER: PLUMS AND PEARLS FZE LLC (sender, NOT the customer) CUSTOMER-SECTION-STARTS: Customer Details
+      machineText = `[EXTRACTION-HINTS] DOCUMENT-TYPE: QUOTATION ISSUER: PLUMS AND PEARLS FZE LLC CUSTOMER-SECTION-STARTS: Customer Details
 Customer Name: ${pdfData.clientName}
 Customer Address: ${pdfData.clientAddress}
 Customer Contact: ${pdfData.clientContact}
 Customer VAT: ${pdfData.clientVat}
 Quotation Number: ${pdfData.quotationNumber}
 Date: ${pdfData.date}
-Total Amount: ${grandTotal}
+Payment Terms: ${pdfData.termsOfPayment}
+Delivery Terms: ${pdfData.termsOfDelivery}
+Total Amount: ${grandTotal.toFixed(2)}
 Items:
-${pdfData.items.map(i => `- ${i.partNo} | ${i.description} | ${i.quantity} @ ${i.unitPrice}`).join("\n")}`;
-      
-      console.log("[DEBUG] Generating PDF with machine-readable layer:", machineText.slice(0, 100) + "...");
+${pdfData.items.map(i => `- ${i.partNo} | ${i.description} | ${i.quantity} @ ${i.unitPrice} | leadTime: ${i.deliveryLeadTime}`).join("\n")}`;
     }
 
-    // 1. First, generate all visual pages (the "screenshot" images)
     pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
     heightLeft -= pageHeight;
     while (heightLeft > 0) {
@@ -113,24 +116,19 @@ ${pdfData.items.map(i => `- ${i.partNo} | ${i.description} | ${i.quantity} @ ${i
       heightLeft -= pageHeight;
     }
 
-    // 2. APPEND GUARANTEED MACHINE-READABLE DATA PAGE (Appendix)
     if (machineText) {
       pdf.addPage();
-      pdf.setTextColor(0, 0, 0); // Standard black
-      pdf.setFontSize(10); // Standard readable size
+      pdf.setTextColor(0, 0, 0);
+      pdf.setFontSize(10);
       const textLines = pdf.splitTextToSize(machineText, 190);
-      
       pdf.text("--- SYSTEM DATA LAYER (MACHINE READABLE) ---", 10, 10);
       pdf.text(textLines, 10, 20);
-      
-      console.log("[DEBUG] Appended machine-readable data appendix to PDF.");
     }
 
     const blob = pdf.output("blob");
     return new File([blob], filename, { type: "application/pdf" });
   } finally {
-    element.style.transform = originalTransform;
-    element.style.marginBottom = originalMargin;
+    document.body.removeChild(clone);
   }
 }
 
@@ -139,6 +137,8 @@ export default function NewQuotationPage() {
   const [stampDataUrl] = useState<string | undefined>(() => localStorage.getItem("quotation_stamp") || undefined);
   const [showTrackDialog, setShowTrackDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // Pre-generated PDF blob stored here so Track doesn't need to re-capture DOM after print
+  const pendingPdfRef = useRef<File | null>(null);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
@@ -228,12 +228,18 @@ export default function NewQuotationPage() {
 
 
 
-  const handlePrint = () => {
-    // Set page title to quotation number (slashes â†’ dashes) so browser saves PDF with correct filename
+  const handlePrint = async () => {
+    // Pre-generate PDF blob BEFORE print dialog (element is perfectly stable here)
+    const pdfFilename = (formData.quotationNumber || "quotation").replace(/\//g, "-") + ".pdf";
+    pendingPdfRef.current = null;
+    try {
+      pendingPdfRef.current = await generatePdfBlob(pdfFilename, pdfData);
+      console.log("[INFO] PDF pre-generated:", pendingPdfRef.current.size, "bytes");
+    } catch (err) {
+      console.warn("[WARN] PDF pre-generation failed:", err);
+    }
     const originalTitle = document.title;
-    const qNum = formData.quotationNumber || "quotation";
-    const pdfFilename = qNum.replace(/\//g, "-");
-    document.title = pdfFilename;
+    document.title = pdfFilename.replace(/\.pdf$/, "");
     window.print();
     setTimeout(() => {
       document.title = originalTitle;
@@ -305,25 +311,38 @@ export default function NewQuotationPage() {
          });
       }
 
-      // Generate a PDF from the live preview and attach it to the quotation record
+      // Attach PDF: use pre-generated blob (from handlePrint) or generate fresh if missing
+      let pdfAttached = false;
       try {
         const pdfFilename = (pdfData.quotationNumber || "quotation").replace(/\//g, "-") + ".pdf";
-        const pdfFile = await generatePdfBlob(pdfFilename, pdfData);
+        let pdfFile = pendingPdfRef.current;
+        if (pdfFile) {
+          console.log("[INFO] Using pre-generated PDF blob:", pdfFile.size, "bytes");
+        } else {
+          console.log("[INFO] No pre-generated blob, generating PDF now...");
+          pdfFile = await generatePdfBlob(pdfFilename, pdfData);
+        }
         const formDataUpload = new FormData();
         formDataUpload.append("file", pdfFile, pdfFilename);
         const attachRes = await fetch(`/api/quotations/${savedQuote.id}/attach-pdf`, {
           method: "POST",
           body: formDataUpload,
         });
-        if (!attachRes.ok) {
-          console.warn("PDF attachment failed:", await attachRes.text());
+        if (attachRes.ok) {
+          pdfAttached = true;
+          pendingPdfRef.current = null;
+          console.log("[INFO] PDF attached successfully to quotation", savedQuote.id);
+        } else {
+          const errText = await attachRes.text();
+          console.error("[ERROR] PDF attachment failed:", attachRes.status, errText);
+          toast({ variant: "destructive", title: "PDF Warning", description: "Quotation saved but PDF attachment failed. You can re-upload the PDF from the detail page." });
         }
       } catch (pdfErr) {
-        console.warn("PDF generation/upload error:", pdfErr);
-        // Non-fatal — quotation is still saved
+        console.error("[ERROR] PDF generation/upload error:", pdfErr);
+        toast({ variant: "destructive", title: "PDF Warning", description: "Quotation saved but PDF could not be generated. Open it and upload the PDF manually." });
       }
 
-      toast({ title: "Success", description: "Quotation is now tracked in your portal." });
+      toast({ title: "Success", description: pdfAttached ? "Quotation tracked with PDF attached." : "Quotation tracked (PDF not attached)." });
       setLocation("/quotations");
     } catch (err) {
       toast({ variant: "destructive", title: "Error", description: "Could not track quotation." });

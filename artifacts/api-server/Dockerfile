@@ -1,8 +1,10 @@
 FROM node:20-alpine AS builder
 
-# Install build dependencies and pdftotext
+# Install build dependencies, pdftotext, and tesseract
 RUN apk add --no-cache \
     poppler-utils \
+    tesseract-ocr \
+    tesseract-ocr-data-eng \
     python3 \
     make \
     g++ \
@@ -33,8 +35,8 @@ RUN pnpm run build
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM node:20-alpine
 
-# Install pdftotext for PDF text extraction
-RUN apk add --no-cache poppler-utils
+# Install pdftotext for PDF text extraction and tesseract for OCR on image PDFs
+RUN apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-eng
 
 # Install pnpm (needed to install runtime node_modules)
 RUN npm install -g pnpm@9
